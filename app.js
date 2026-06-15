@@ -103,6 +103,7 @@ const els = {
   resetDemoBtn: document.getElementById("resetDemoBtn"),
   titleInput: document.getElementById("titleInput"),
   contentInput: document.getElementById("contentInput"),
+  formFeedback: document.getElementById("formFeedback"),
   tagsInput: document.getElementById("tagsInput"),
   typeInput: document.getElementById("typeInput"),
   statusInput: document.getElementById("statusInput"),
@@ -858,6 +859,42 @@ function persistAndRender() {
   render();
 }
 
+function setComposerFeedback(message, type = "neutral") {
+  els.formFeedback.textContent = message;
+  els.formFeedback.classList.toggle("error", type === "error");
+  els.formFeedback.classList.toggle("success", type === "success");
+}
+
+function setFieldValidity(input, isValid) {
+  input.setAttribute("aria-invalid", isValid ? "false" : "true");
+}
+
+function validateComposer() {
+  const title = els.titleInput.value.trim();
+  const content = els.contentInput.value.trim();
+  const missing = [];
+
+  setFieldValidity(els.titleInput, Boolean(title));
+  setFieldValidity(els.contentInput, Boolean(content));
+
+  if (!title) missing.push("제목");
+  if (!content) missing.push("내용");
+
+  if (missing.length > 0) {
+    setComposerFeedback(`${missing.join(", ")}을 입력하면 카드가 저장됩니다.`, "error");
+    (title ? els.contentInput : els.titleInput).focus();
+    return false;
+  }
+
+  return true;
+}
+
+function resetComposerValidation() {
+  setFieldValidity(els.titleInput, true);
+  setFieldValidity(els.contentInput, true);
+  setComposerFeedback("제목과 내용만 적으면 바로 추가할 수 있습니다. Ctrl/⌘ + Enter로 저장합니다.");
+}
+
 async function addPost() {
   const title = els.titleInput.value.trim();
   const content = els.contentInput.value.trim();
@@ -866,8 +903,7 @@ async function addPost() {
   const evidenceUrl = els.evidenceInput.value.trim();
   const attachmentFile = els.attachmentInput.files[0] || null;
 
-  if (!title || !content) {
-    alert("제목과 내용을 입력하세요.");
+  if (!validateComposer()) {
     return;
   }
 
@@ -920,6 +956,7 @@ async function addPost() {
   els.attachmentInput.value = "";
   els.addPostBtn.disabled = false;
   els.addPostBtn.textContent = "카드 추가";
+  setComposerFeedback(`"${title}" 카드를 추가했습니다.`, "success");
   persistAndRender();
 }
 
@@ -1182,6 +1219,22 @@ function setupEvents() {
     if (file) void importBackup(file);
   });
 
+  [els.titleInput, els.contentInput].forEach((input) => {
+    input.addEventListener("input", () => {
+      if (input.getAttribute("aria-invalid") === "true") setFieldValidity(input, Boolean(input.value.trim()));
+      if (els.formFeedback.classList.contains("error")) {
+        setComposerFeedback("제목과 내용만 적으면 바로 추가할 수 있습니다. Ctrl/⌘ + Enter로 저장합니다.");
+      }
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        void addPost();
+      }
+    });
+  });
+
   els.layoutOptions.forEach((btn) => {
     btn.addEventListener("click", () => {
       shared.layout = btn.dataset.layout;
@@ -1223,6 +1276,7 @@ function setupEvents() {
 
 function bootstrap() {
   setupEvents();
+  resetComposerValidation();
   render();
   persistBoardSnapshot({ syncCloud: false });
   void initializeCloudSync();

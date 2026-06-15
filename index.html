@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+    <a class="skip-link" href="#board">보드로 바로가기</a>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand">
@@ -86,71 +87,75 @@
             </div>
 
             <label>
-              제목
-              <input id="titleInput" type="text" maxlength="72" placeholder="예: 이번 주 처리할 작업 정리">
+              제목 <span class="required-mark">필수</span>
+              <input id="titleInput" type="text" maxlength="72" placeholder="예: 이번 주 처리할 작업 정리" aria-describedby="formFeedback" aria-invalid="false">
             </label>
 
             <label>
-              내용
-              <textarea id="contentInput" rows="5" maxlength="700" placeholder="해야 할 일, 참고 내용, 다음 액션을 적어주세요"></textarea>
+              내용 <span class="required-mark">필수</span>
+              <textarea id="contentInput" rows="5" maxlength="700" placeholder="해야 할 일, 참고 내용, 다음 액션을 적어주세요" aria-describedby="formFeedback" aria-invalid="false"></textarea>
             </label>
 
-            <div class="field-grid">
+            <details class="composer-details">
+              <summary>세부 옵션</summary>
+              <div class="field-grid">
+                <label>
+                  유형
+                  <select id="typeInput">
+                    <option value="idea">Idea</option>
+                    <option value="question">Question</option>
+                    <option value="resource">Resource</option>
+                    <option value="decision">Decision</option>
+                  </select>
+                </label>
+
+                <label>
+                  상태
+                  <select id="statusInput">
+                    <option value="new">New</option>
+                    <option value="discussing">Discussing</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="decided">Decided</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="field-grid">
+                <label>
+                  우선순위
+                  <select id="priorityInput">
+                    <option value="P2">P2</option>
+                    <option value="P1">P1</option>
+                    <option value="P3">P3</option>
+                  </select>
+                </label>
+
+                <label>
+                  섹션
+                  <select id="sectionInput"></select>
+                </label>
+              </div>
+
               <label>
-                유형
-                <select id="typeInput">
-                  <option value="idea">Idea</option>
-                  <option value="question">Question</option>
-                  <option value="resource">Resource</option>
-                  <option value="decision">Decision</option>
-                </select>
+                근거 링크
+                <input id="evidenceInput" type="url" maxlength="220" placeholder="https://...">
               </label>
 
               <label>
-                상태
-                <select id="statusInput">
-                  <option value="new">New</option>
-                  <option value="discussing">Discussing</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="decided">Decided</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="field-grid">
-              <label>
-                우선순위
-                <select id="priorityInput">
-                  <option value="P2">P2</option>
-                  <option value="P1">P1</option>
-                  <option value="P3">P3</option>
-                </select>
+                태그
+                <input id="tagsInput" type="text" placeholder="예: 업무, 아이디어, 개인">
               </label>
 
               <label>
-                섹션
-                <select id="sectionInput"></select>
+                첨부 자료
+                <input id="attachmentInput" type="file" accept="image/*,.pdf,.csv,.xlsx,.xls,.doc,.docx,.ppt,.pptx,.txt">
               </label>
-            </div>
 
-            <label>
-              근거 링크
-              <input id="evidenceInput" type="url" maxlength="220" placeholder="https://...">
-            </label>
+              <div id="attachmentHint" class="file-hint">첨부 파일은 이 브라우저의 IndexedDB에 저장됩니다.</div>
+            </details>
 
-            <label>
-              태그
-              <input id="tagsInput" type="text" placeholder="예: 업무, 아이디어, 개인">
-            </label>
-
-            <label>
-              첨부 자료
-              <input id="attachmentInput" type="file" accept="image/*,.pdf,.csv,.xlsx,.xls,.doc,.docx,.ppt,.pptx,.txt">
-            </label>
-
-            <div id="attachmentHint" class="file-hint">첨부 파일은 이 브라우저의 IndexedDB에 저장됩니다.</div>
-
+            <div id="formFeedback" class="form-feedback" role="status" aria-live="polite">제목과 내용만 적으면 바로 추가할 수 있습니다. Ctrl/⌘ + Enter로 저장합니다.</div>
             <button id="addPostBtn" class="primary-btn" type="button">카드 추가</button>
           </section>
 
