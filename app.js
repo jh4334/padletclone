@@ -4,6 +4,7 @@ const LOCAL_STATE_PREFIX = "boardly-local-state-";
 const LEGACY_STATE_PREFIX = "boardly-board-snapshot-";
 const ATTACHMENT_DB = "boardly-local-attachments";
 const ATTACHMENT_STORE = "files";
+const DEFAULT_SUPABASE_TABLE = "boardly_boards";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const FORBIDDEN_TERMS = ["spam", "hate", "욕설", "광고도배"];
 
@@ -86,6 +87,7 @@ const defaultPrefs = {
   hideArchived: true,
 };
 
+const boardlyConfig = window.BOARDLY_CONFIG || {};
 const boardId = getBoardIdFromUrl();
 const profile = loadProfile();
 
@@ -122,6 +124,8 @@ const els = {
   displayNameInput: document.getElementById("displayNameInput"),
   syncStatus: document.getElementById("syncStatus"),
   storageStatus: document.getElementById("storageStatus"),
+  storageModeTitle: document.getElementById("storageModeTitle"),
+  storageModeText: document.getElementById("storageModeText"),
   storagePosts: document.getElementById("storagePosts"),
   storageAttachments: document.getElementById("storageAttachments"),
   storageDecisions: document.getElementById("storageDecisions"),
@@ -131,6 +135,17 @@ let shared = normalizeSharedState(loadBoardSnapshot());
 let prefs = loadPrefs();
 let drag = { id: null, offsetX: 0, offsetY: 0 };
 let attachmentDbPromise = null;
+let cloud = {
+  requested: isSupabaseRequested(),
+  configured: false,
+  ready: false,
+  client: null,
+  table: boardlyConfig.SUPABASE_TABLE || DEFAULT_SUPABASE_TABLE,
+  saveTimer: null,
+  saving: false,
+  pendingSave: false,
+  lastError: "",
+};
 
 function getBoardIdFromUrl() {
   const url = new URL(window.location.href);
@@ -272,17 +287,139 @@ function loadBoardSnapshot() {
   }
 }
 
-function persistBoardSnapshot() {
+function persistBoardSnapshot(options = {}) {
+  const syncCloud = options.syncCloud !== false;
   try {
     localStorage.setItem(stateKey(), JSON.stringify(shared));
-    updateSaveStatus("Local saved");
+    updateSaveStatus(cloud.ready ? "Cloud queued" : "Local saved", cloud.ready ? "syncing" : "local");
+    if (syncCloud) scheduleCloudSave();
   } catch {
-    updateSaveStatus("Storage full");
+    updateSaveStatus("Storage full", "error");
   }
 }
 
-function updateSaveStatus(text) {
+function updateSaveStatus(text, state = "local") {
   els.syncStatus.textContent = text;
+  els.syncStatus.dataset.state = state;
+}
+
+function isSupabaseRequested() {
+  return boardlyConfig.MODE === "supabase" || Boolean(boardlyConfig.SUPABASE_URL || boardlyConfig.SUPABASE_ANON_KEY);
+}
+
+function getSupabaseUrl() {
+  return String(boardlyConfig.SUPABASE_URL || "").trim();
+}
+
+function getSupabaseKey() {
+  return String(boardlyConfig.SUPABASE_ANON_KEY || boardlyConfig.SUPABASE_KEY || "").trim();
+}
+
+function createCloudClient() {
+  const url = getSupabaseUrl();
+  const key = getSupabaseKey();
+  cloud.configured = Boolean(url && key);
+
+  if (!cloud.requested) return null;
+  if (!cloud.configured) {
+    cloud.lastError = "SUPABASE_ANON_KEY 필요";
+    return null;
+  }
+  if (!window.supabase?.createClient) {
+    cloud.lastError = "Supabase SDK 로드 실패";
+    return null;
+  }
+
+  return window.supabase.createClient(url, key);
+}
+
+async function initializeCloudSync() {
+  if (!cloud.requested) {
+    updateSaveStatus("Local saved", "local");
+    renderControls();
+    return;
+  }
+
+  updateSaveStatus("Cloud setup", "syncing");
+  cloud.client = createCloudClient();
+
+  if (!cloud.client) {
+    updateSaveStatus("Local fallback", "warning");
+    renderControls();
+    return;
+  }
+
+  cloud.ready = true;
+
+  try {
+    const { data, error } = await cloud.client
+      .from(cloud.table)
+      .select("snapshot, updated_at")
+      .eq("board_id", boardId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data?.snapshot) {
+      shared = normalizeSharedState(data.snapshot);
+      persistBoardSnapshot({ syncCloud: false });
+      render();
+      updateSaveStatus("Cloud loaded", "cloud");
+      return;
+    }
+
+    await saveCloudSnapshot();
+  } catch (error) {
+    cloud.lastError = error.message || "Supabase 연결 실패";
+    cloud.ready = false;
+    updateSaveStatus("Local fallback", "warning");
+    renderControls();
+  }
+}
+
+function scheduleCloudSave() {
+  if (!cloud.ready || !cloud.client) return;
+  window.clearTimeout(cloud.saveTimer);
+  cloud.saveTimer = window.setTimeout(() => {
+    void saveCloudSnapshot();
+  }, 500);
+}
+
+async function saveCloudSnapshot() {
+  if (!cloud.ready || !cloud.client) return;
+
+  if (cloud.saving) {
+    cloud.pendingSave = true;
+    return;
+  }
+
+  cloud.saving = true;
+  updateSaveStatus("Cloud saving", "syncing");
+
+  try {
+    const { error } = await cloud.client
+      .from(cloud.table)
+      .upsert({
+        board_id: boardId,
+        snapshot: shared,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "board_id" });
+
+    if (error) throw error;
+
+    cloud.lastError = "";
+    updateSaveStatus("Cloud saved", "cloud");
+  } catch (error) {
+    cloud.lastError = error.message || "Supabase 저장 실패";
+    updateSaveStatus("Cloud error", "error");
+  } finally {
+    cloud.saving = false;
+    if (cloud.pendingSave) {
+      cloud.pendingSave = false;
+      scheduleCloudSave();
+    }
+    renderControls();
+  }
 }
 
 function parseTags(raw) {
@@ -669,11 +806,42 @@ function renderControls() {
   els.hideArchivedInput.checked = prefs.hideArchived;
   els.boardIdInput.value = boardId;
   els.displayNameInput.value = profile.name;
-  els.storageStatus.textContent = "이 기기 브라우저에 저장됨";
+  els.storageStatus.textContent = getStorageStatusText();
+  renderStorageModeNotice();
 
   els.layoutOptions.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.layout === shared.layout);
   });
+}
+
+function getStorageStatusText() {
+  if (cloud.ready) return "Supabase + 브라우저 저장";
+  if (cloud.requested && !cloud.configured) return "Supabase 키 입력 필요";
+  if (cloud.requested && cloud.lastError) return "Supabase 연결 대기";
+  return "이 기기 브라우저에 저장됨";
+}
+
+function renderStorageModeNotice() {
+  if (cloud.ready) {
+    els.storageModeTitle.textContent = "Supabase 동기화";
+    els.storageModeText.textContent = "카드와 보드 상태는 Supabase에 저장되고, 이 브라우저에도 임시 보관됩니다. 첨부 파일 본문은 아직 브라우저 저장소를 사용합니다.";
+    return;
+  }
+
+  if (cloud.requested && !cloud.configured) {
+    els.storageModeTitle.textContent = "Supabase 연결 준비됨";
+    els.storageModeText.textContent = "프로젝트 URL은 설정됐습니다. anon/public key를 넣으면 보드 데이터가 Supabase에 저장됩니다.";
+    return;
+  }
+
+  if (cloud.requested && cloud.lastError) {
+    els.storageModeTitle.textContent = "로컬 fallback";
+    els.storageModeText.textContent = `Supabase 연결 전까지 이 브라우저에 저장됩니다. 상태: ${cloud.lastError}`;
+    return;
+  }
+
+  els.storageModeTitle.textContent = "로컬 전용 보드";
+  els.storageModeText.textContent = "카드와 첨부는 이 브라우저에만 저장됩니다. 다른 기기로 옮길 때는 백업/복원을 사용하세요.";
 }
 
 function render() {
@@ -809,7 +977,9 @@ async function copyShareLink() {
   const link = `${location.origin}${location.pathname}?board=${encodeURIComponent(boardId)}`;
   try {
     await navigator.clipboard.writeText(link);
-    alert("현재 보드 링크를 복사했습니다. 데이터는 이 브라우저 안에만 있습니다.");
+    alert(cloud.ready
+      ? "현재 보드 링크를 복사했습니다. 같은 Supabase 설정을 쓰는 환경에서 같은 보드를 불러옵니다."
+      : "현재 보드 링크를 복사했습니다. Supabase 연결 전에는 데이터가 이 브라우저 안에만 있습니다.");
   } catch {
     alert(`복사 실패. 수동으로 복사하세요: ${link}`);
   }
@@ -1054,7 +1224,8 @@ function setupEvents() {
 function bootstrap() {
   setupEvents();
   render();
-  persistBoardSnapshot();
+  persistBoardSnapshot({ syncCloud: false });
+  void initializeCloudSync();
 }
 
 bootstrap();

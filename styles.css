@@ -411,11 +411,36 @@ textarea:disabled {
   flex: none;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--green-soft);
-  color: var(--green);
+  background: var(--panel-soft);
+  color: var(--muted);
   padding: 7px 10px;
   font-size: 12px;
   font-weight: 700;
+}
+
+.sync-pill[data-state="cloud"] {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.sync-pill[data-state="local"] {
+  color: var(--muted);
+  background: #edf0f4;
+}
+
+.sync-pill[data-state="syncing"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sync-pill[data-state="warning"] {
+  color: var(--yellow);
+  background: var(--yellow-soft);
+}
+
+.sync-pill[data-state="error"] {
+  color: var(--red);
+  background: var(--red-soft);
 }
 
 .main-stage {

@@ -18,14 +18,15 @@
 3. Deploy site
 
 ## 중요한 포인트
-- 현재 버전은 Supabase 없이 로컬 저장만 사용합니다.
-- 배포해도 사용자별 데이터는 각자 브라우저에 저장됩니다.
+- 현재 버전은 Supabase URL과 anon/publishable key가 있으면 보드 데이터를 Supabase에 저장합니다.
+- `boardly.config.js`의 `SUPABASE_ANON_KEY`가 비어 있거나 연결에 실패하면 로컬 저장으로 fallback 됩니다.
 - 다른 기기로 옮기려면 앱 상단 `백업` / `복원`을 사용하세요.
 - `_redirects` 파일을 포함했기 때문에 `?board=xxx` 쿼리 링크도 동일하게 `index.html`로 처리됩니다.
+- 첨부 파일 본문은 아직 Supabase Storage가 아니라 각 브라우저의 IndexedDB에 저장됩니다.
 
 ## 배포 후 테스트
 1. 배포 URL 접속
 2. 카드 추가
-3. 새로고침 후 카드 유지 확인
+3. 새로고침 후 상단 상태가 `Cloud saved` 또는 `Cloud loaded`인지 확인
 4. `백업` 파일 내보내기
 5. 다른 브라우저에서 `복원`으로 복원 확인

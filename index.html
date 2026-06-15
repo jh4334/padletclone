@@ -39,14 +39,14 @@
             복원
             <input id="importBackupInput" type="file" accept="application/json,.json">
           </label>
-          <div class="sync-pill" id="syncStatus">Local saved</div>
+          <div class="sync-pill" id="syncStatus" data-state="local">Local saved</div>
         </div>
       </header>
 
       <section class="local-notice" aria-label="로컬 저장 안내">
         <div>
-          <strong>로컬 전용 보드</strong>
-          <span>카드와 첨부는 이 브라우저에만 저장됩니다. 다른 기기나 팀원에게 옮길 때는 백업/복원을 사용하세요.</span>
+          <strong id="storageModeTitle">저장 방식</strong>
+          <span id="storageModeText">Supabase 연결 전까지는 이 브라우저에 저장됩니다. 다른 기기로 옮길 때는 백업/복원을 사용하세요.</span>
         </div>
         <div class="notice-steps">
           <span>작업</span>
@@ -259,6 +259,8 @@
       </article>
     </template>
 
+    <script src="./boardly.config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./app.js"></script>
   </body>
 </html>
