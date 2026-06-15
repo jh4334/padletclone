@@ -31,6 +31,7 @@ const CANVAS_CARD_HEIGHT = 190;
 const CANVAS_CARD_GAP = 24;
 const CANVAS_START_X = 30;
 const CANVAS_START_Y = 30;
+const ACTIVITY_LIMIT = 50;
 
 const seedPosts = [
   {
@@ -78,6 +79,7 @@ const defaultSharedState = {
   layout: "canvas",
   sections: ["All", "Inbox", "Idea", "Decision"],
   posts: seedPosts,
+  activity: [],
 };
 
 const defaultPrefs = {
@@ -86,6 +88,114 @@ const defaultPrefs = {
   sort: "recent",
   hideArchived: true,
 };
+
+const BOARD_TEMPLATES = [
+  {
+    id: "weekly-review",
+    title: "주간 업무 리뷰",
+    description: "이번 주 할 일, 막힌 일, 결정 사항을 한 번에 세팅합니다.",
+    sections: ["Inbox", "Blocked", "Decision"],
+    posts: [
+      {
+        title: "이번 주 핵심 할 일",
+        content: "이번 주 반드시 끝낼 작업을 3개 이내로 정리합니다.",
+        tags: ["주간", "할일"],
+        section: "Inbox",
+        type: "question",
+        priority: "P1",
+        status: "discussing",
+      },
+      {
+        title: "막힌 일 점검",
+        content: "혼자 해결하기 어려운 병목, 필요한 자료, 기다리는 답변을 기록합니다.",
+        tags: ["병목", "지원요청"],
+        section: "Blocked",
+        type: "idea",
+        priority: "P1",
+        status: "blocked",
+      },
+      {
+        title: "이번 주 결정 기록",
+        content: "나중에 다시 확인해야 하는 선택과 그 이유를 남깁니다.",
+        tags: ["결정", "회고"],
+        section: "Decision",
+        type: "decision",
+        priority: "P2",
+        status: "decided",
+      },
+    ],
+  },
+  {
+    id: "meeting",
+    title: "회의 보드",
+    description: "안건, 자료, 결정, 후속 액션을 회의용으로 구성합니다.",
+    sections: ["Agenda", "Resource", "Decision", "Action"],
+    posts: [
+      {
+        title: "오늘 논의할 안건",
+        content: "회의에서 반드시 결정해야 할 주제를 적습니다.",
+        tags: ["회의", "안건"],
+        section: "Agenda",
+        type: "question",
+        priority: "P1",
+        status: "new",
+      },
+      {
+        title: "참고 자료 모음",
+        content: "논의에 필요한 링크, 파일, 근거 자료를 붙입니다.",
+        tags: ["자료", "근거"],
+        section: "Resource",
+        type: "resource",
+        priority: "P2",
+        status: "discussing",
+      },
+      {
+        title: "후속 액션",
+        content: "담당자와 다음 행동을 댓글로 나눠 기록합니다.",
+        tags: ["액션", "담당"],
+        section: "Action",
+        type: "idea",
+        priority: "P2",
+        status: "new",
+      },
+    ],
+  },
+  {
+    id: "idea-lab",
+    title: "아이디어 랩",
+    description: "아이디어, 리스크, 검증 방법을 빠르게 분리합니다.",
+    sections: ["Idea", "Risk", "Experiment", "Decision"],
+    posts: [
+      {
+        title: "새 아이디어",
+        content: "떠오른 생각을 판단하지 말고 먼저 적습니다.",
+        tags: ["아이디어"],
+        section: "Idea",
+        type: "idea",
+        priority: "P2",
+        status: "new",
+      },
+      {
+        title: "예상 리스크",
+        content: "실패할 수 있는 이유와 확인해야 할 조건을 적습니다.",
+        tags: ["리스크"],
+        section: "Risk",
+        type: "question",
+        priority: "P1",
+        status: "blocked",
+      },
+      {
+        title: "검증 실험",
+        content: "작게 확인할 수 있는 테스트 방법을 정합니다.",
+        tags: ["실험", "검증"],
+        section: "Experiment",
+        type: "resource",
+        priority: "P2",
+        status: "discussing",
+      },
+    ],
+  },
+];
 
 const boardlyConfig = window.BOARDLY_CONFIG || {};
 const boardId = getBoardIdFromUrl();
@@ -115,7 +225,10 @@ const els = {
   addPostBtn: document.getElementById("addPostBtn"),
   newSectionInput: document.getElementById("newSectionInput"),
   addSectionBtn: document.getElementById("addSectionBtn"),
+  templateList: document.getElementById("templateList"),
   decisionList: document.getElementById("decisionList"),
+  activityList: document.getElementById("activityList"),
+  undoBtn: document.getElementById("undoBtn"),
   board: document.getElementById("board"),
   sectionTabs: document.getElementById("sectionTabs"),
   boardSubtitle: document.getElementById("boardSubtitle"),
@@ -130,11 +243,28 @@ const els = {
   storagePosts: document.getElementById("storagePosts"),
   storageAttachments: document.getElementById("storageAttachments"),
   storageDecisions: document.getElementById("storageDecisions"),
+  editOverlay: document.getElementById("editOverlay"),
+  closeEditBtn: document.getElementById("closeEditBtn"),
+  cancelEditBtn: document.getElementById("cancelEditBtn"),
+  saveEditBtn: document.getElementById("saveEditBtn"),
+  editTitleInput: document.getElementById("editTitleInput"),
+  editContentInput: document.getElementById("editContentInput"),
+  editTypeInput: document.getElementById("editTypeInput"),
+  editStatusInput: document.getElementById("editStatusInput"),
+  editPriorityInput: document.getElementById("editPriorityInput"),
+  editSectionInput: document.getElementById("editSectionInput"),
+  editEvidenceInput: document.getElementById("editEvidenceInput"),
+  editTagsInput: document.getElementById("editTagsInput"),
+  editAttachmentList: document.getElementById("editAttachmentList"),
+  editAttachmentInput: document.getElementById("editAttachmentInput"),
+  editFeedback: document.getElementById("editFeedback"),
 };
 
 let shared = normalizeSharedState(loadBoardSnapshot());
 let prefs = loadPrefs();
 let drag = { id: null, offsetX: 0, offsetY: 0 };
+let undoStack = [];
+let editing = { postId: null, removedAttachmentIds: new Set() };
 let attachmentDbPromise = null;
 let cloud = {
   requested: isSupabaseRequested(),
@@ -199,6 +329,16 @@ function normalizeAttachment(attachment) {
   };
 }
 
+function normalizeActivityEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  return {
+    id: entry.id || crypto.randomUUID(),
+    label: entry.label || "변경 사항",
+    actor: entry.actor || "익명 팀원",
+    createdAt: entry.createdAt || new Date().toISOString(),
+  };
+}
+
 function normalizePost(post, index) {
   const legacyPending = post.status === "pending";
   const status = STATUSES.includes(post.status) ? post.status : legacyPending ? "new" : "new";
@@ -236,6 +376,9 @@ function normalizeSharedState(value) {
     layout: normalizeLayout(value?.layout),
     sections: normalizeSections(value?.sections),
     posts: Array.isArray(value?.posts) ? value.posts.map(normalizePost) : structuredClone(seedPosts),
+    activity: Array.isArray(value?.activity)
+      ? value.activity.map(normalizeActivityEntry).filter(Boolean).slice(0, ACTIVITY_LIMIT)
+      : [],
   };
 
   for (const post of merged.posts) {
@@ -297,6 +440,45 @@ function persistBoardSnapshot(options = {}) {
   } catch {
     updateSaveStatus("Storage full", "error");
   }
+}
+
+function cloneSharedState(value = shared) {
+  return structuredClone(value);
+}
+
+function findPost(postId) {
+  return shared.posts.find((post) => post.id === postId);
+}
+
+function addActivity(label) {
+  shared.activity = [
+    {
+      id: crypto.randomUUID(),
+      label,
+      actor: profile.name,
+      createdAt: new Date().toISOString(),
+    },
+    ...(Array.isArray(shared.activity) ? shared.activity : []),
+  ].slice(0, ACTIVITY_LIMIT);
+}
+
+function commitMutation(label, mutate) {
+  const before = cloneSharedState();
+  const result = mutate();
+  undoStack.push({ label, snapshot: before });
+  addActivity(label);
+  persistAndRender();
+  return result;
+}
+
+function undoLastAction() {
+  const previous = undoStack.pop();
+  if (!previous) return;
+
+  closeEditDrawer();
+  shared = normalizeSharedState(previous.snapshot);
+  addActivity(`되돌림: ${previous.label}`);
+  persistAndRender();
 }
 
 function updateSaveStatus(text, state = "local") {
@@ -632,6 +814,67 @@ function renderDecisionList() {
   });
 }
 
+function renderTemplateList() {
+  els.templateList.innerHTML = "";
+  BOARD_TEMPLATES.forEach((template) => {
+    const btn = document.createElement("button");
+    btn.className = "template-card";
+    btn.type = "button";
+    btn.dataset.template = template.id;
+
+    const title = document.createElement("strong");
+    title.textContent = template.title;
+    const description = document.createElement("span");
+    description.textContent = template.description;
+
+    btn.append(title, description);
+    btn.addEventListener("click", () => applyTemplate(template.id));
+    els.templateList.appendChild(btn);
+  });
+}
+
+function renderActivityList() {
+  els.activityList.innerHTML = "";
+  els.undoBtn.disabled = undoStack.length === 0;
+
+  const activity = Array.isArray(shared.activity) ? shared.activity.slice(0, 10) : [];
+  if (activity.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "아직 기록된 변경이 없습니다.";
+    els.activityList.appendChild(empty);
+    return;
+  }
+
+  activity.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "activity-item";
+    const label = document.createElement("strong");
+    label.textContent = entry.label;
+    const meta = document.createElement("span");
+    meta.textContent = `${entry.actor} · ${new Intl.DateTimeFormat("ko-KR", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(entry.createdAt))}`;
+    item.append(label, meta);
+    els.activityList.appendChild(item);
+  });
+}
+
+function renderEditSectionInputs() {
+  els.editSectionInput.innerHTML = "";
+  shared.sections
+    .filter((section) => section !== "All")
+    .forEach((section) => {
+      const option = document.createElement("option");
+      option.value = section;
+      option.textContent = section;
+      els.editSectionInput.appendChild(option);
+    });
+}
+
 function getCardKicker(post) {
   return `${TYPE_LABELS[post.type]} · ${post.priority} · ${post.section}`;
 }
@@ -660,6 +903,7 @@ function renderPostCard(post) {
   const commentInput = fragment.querySelector(".comment-form input");
   const commentBtn = fragment.querySelector(".comment-form button");
   const statusSelect = fragment.querySelector(".card-status-select");
+  const editBtn = fragment.querySelector(".card-edit-btn");
   const deleteBtn = fragment.querySelector(".card-delete-btn");
 
   card.dataset.id = post.id;
@@ -717,26 +961,40 @@ function renderPostCard(post) {
     const key = btn.dataset.reaction;
     btn.querySelector("span").textContent = String(post.reactions[key] || 0);
     btn.addEventListener("click", () => {
-      post.reactions[key] = (post.reactions[key] || 0) + 1;
-      persistAndRender();
+      commitMutation(`반응 추가: ${post.title}`, () => {
+        const target = findPost(post.id);
+        if (!target) return;
+        target.reactions[key] = (target.reactions[key] || 0) + 1;
+      });
     });
   });
 
   commentBtn.addEventListener("click", () => {
     const value = commentInput.value.trim();
     if (!value) return;
-    post.comments.push({
-      id: crypto.randomUUID(),
-      authorName: profile.name,
-      text: value,
-      createdAt: new Date().toISOString(),
+    commitMutation(`댓글 추가: ${post.title}`, () => {
+      const target = findPost(post.id);
+      if (!target) return;
+      target.comments.push({
+        id: crypto.randomUUID(),
+        authorName: profile.name,
+        text: value,
+        createdAt: new Date().toISOString(),
+      });
     });
-    persistAndRender();
   });
 
   statusSelect.addEventListener("change", (event) => {
-    post.status = event.target.value;
-    persistAndRender();
+    const nextStatus = event.target.value;
+    if (post.status === nextStatus) return;
+    commitMutation(`상태 변경: ${post.title} -> ${STATUS_LABELS[nextStatus]}`, () => {
+      const target = findPost(post.id);
+      if (target) target.status = nextStatus;
+    });
+  });
+
+  editBtn.addEventListener("click", () => {
+    openEditDrawer(post.id);
   });
 
   deleteBtn.addEventListener("click", () => {
@@ -847,9 +1105,12 @@ function renderStorageModeNotice() {
 
 function render() {
   renderSectionInputs();
+  renderEditSectionInputs();
   renderSectionTabs();
   renderStats();
+  renderTemplateList();
   renderDecisionList();
+  renderActivityList();
   renderBoard();
   renderControls();
 }
@@ -895,6 +1156,156 @@ function resetComposerValidation() {
   setComposerFeedback("제목과 내용만 적으면 바로 추가할 수 있습니다. Ctrl/⌘ + Enter로 저장합니다.");
 }
 
+function setEditFeedback(message, type = "neutral") {
+  els.editFeedback.textContent = message;
+  els.editFeedback.classList.toggle("error", type === "error");
+  els.editFeedback.classList.toggle("success", type === "success");
+}
+
+function setEditFieldValidity(input, isValid) {
+  input.setAttribute("aria-invalid", isValid ? "false" : "true");
+}
+
+function resetEditValidation() {
+  setEditFieldValidity(els.editTitleInput, true);
+  setEditFieldValidity(els.editContentInput, true);
+  setEditFeedback("수정 내용을 저장하면 보드에 바로 반영됩니다.");
+}
+
+function validateEditForm() {
+  const title = els.editTitleInput.value.trim();
+  const content = els.editContentInput.value.trim();
+  const missing = [];
+
+  setEditFieldValidity(els.editTitleInput, Boolean(title));
+  setEditFieldValidity(els.editContentInput, Boolean(content));
+
+  if (!title) missing.push("제목");
+  if (!content) missing.push("내용");
+
+  if (missing.length > 0) {
+    setEditFeedback(`${missing.join(", ")}을 입력해야 수정할 수 있습니다.`, "error");
+    (title ? els.editContentInput : els.editTitleInput).focus();
+    return false;
+  }
+
+  return true;
+}
+
+function openEditDrawer(postId) {
+  const post = findPost(postId);
+  if (!post) return;
+
+  editing = { postId, removedAttachmentIds: new Set() };
+  renderEditSectionInputs();
+  els.editTitleInput.value = post.title;
+  els.editContentInput.value = post.content;
+  els.editTypeInput.value = post.type;
+  els.editStatusInput.value = post.status;
+  els.editPriorityInput.value = post.priority;
+  els.editSectionInput.value = post.section;
+  els.editEvidenceInput.value = post.evidenceUrl || "";
+  els.editTagsInput.value = post.tags.join(", ");
+  els.editAttachmentInput.value = "";
+  resetEditValidation();
+  renderEditAttachmentList();
+  els.editOverlay.hidden = false;
+  els.editTitleInput.focus();
+}
+
+function closeEditDrawer() {
+  if (!els.editOverlay) return;
+  els.editOverlay.hidden = true;
+  editing = { postId: null, removedAttachmentIds: new Set() };
+  if (els.editAttachmentInput) els.editAttachmentInput.value = "";
+}
+
+function renderEditAttachmentList() {
+  const post = findPost(editing.postId);
+  els.editAttachmentList.innerHTML = "";
+
+  const attachments = post
+    ? post.attachments.filter((attachment) => !editing.removedAttachmentIds.has(attachment.id))
+    : [];
+
+  if (attachments.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "현재 첨부가 없습니다.";
+    els.editAttachmentList.appendChild(empty);
+    return;
+  }
+
+  attachments.forEach((attachment) => {
+    const item = document.createElement("div");
+    item.className = "edit-attachment-item";
+
+    const label = document.createElement("span");
+    label.textContent = `${attachment.name}${attachment.size ? ` · ${formatBytes(attachment.size)}` : ""}`;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "edit-attachment-remove";
+    removeBtn.type = "button";
+    removeBtn.textContent = "제거";
+    removeBtn.addEventListener("click", () => {
+      editing.removedAttachmentIds.add(attachment.id);
+      setEditFeedback("첨부 제거가 예약됐습니다. 저장해야 반영됩니다.");
+      renderEditAttachmentList();
+    });
+
+    item.append(label, removeBtn);
+    els.editAttachmentList.appendChild(item);
+  });
+}
+
+async function saveEditedPost() {
+  const post = findPost(editing.postId);
+  if (!post || !validateEditForm()) return;
+
+  const nextTitle = els.editTitleInput.value.trim();
+  const nextContent = els.editContentInput.value.trim();
+  const attachmentFile = els.editAttachmentInput.files[0] || null;
+  let newAttachment = null;
+
+  if (attachmentFile) {
+    if (attachmentFile.size > MAX_ATTACHMENT_BYTES) {
+      setEditFeedback("첨부 파일은 10MB 이하만 저장할 수 있습니다.", "error");
+      return;
+    }
+
+    try {
+      els.saveEditBtn.disabled = true;
+      els.saveEditBtn.textContent = "저장 중";
+      newAttachment = await createLocalAttachment(attachmentFile);
+    } catch (error) {
+      setEditFeedback(`첨부 저장 실패: ${error.message}`, "error");
+      return;
+    } finally {
+      els.saveEditBtn.disabled = false;
+      els.saveEditBtn.textContent = "수정 저장";
+    }
+  }
+
+  commitMutation(`카드 수정: ${nextTitle}`, () => {
+    const target = findPost(post.id);
+    if (!target) return;
+
+    target.title = nextTitle;
+    target.content = nextContent;
+    target.type = els.editTypeInput.value;
+    target.status = els.editStatusInput.value;
+    target.priority = els.editPriorityInput.value;
+    target.section = els.editSectionInput.value || "Inbox";
+    target.evidenceUrl = els.editEvidenceInput.value.trim();
+    target.tags = parseTags(els.editTagsInput.value);
+    target.attachments = target.attachments
+      .filter((attachment) => !editing.removedAttachmentIds.has(attachment.id));
+    if (newAttachment) target.attachments.push(newAttachment);
+  });
+
+  closeEditDrawer();
+}
+
 async function addPost() {
   const title = els.titleInput.value.trim();
   const content = els.contentInput.value.trim();
@@ -929,24 +1340,26 @@ async function addPost() {
 
   const isPending = hasForbiddenTerm(`${title} ${content}`);
   const position = getNextCanvasPosition();
-  shared.posts.push({
-    id: crypto.randomUUID(),
-    title,
-    content,
-    tags,
-    section,
-    type: els.typeInput.value,
-    priority: els.priorityInput.value,
-    status: els.statusInput.value,
-    moderationStatus: isPending ? "pending" : "live",
-    evidenceUrl,
-    attachments,
-    createdAt: new Date().toISOString(),
-    x: position.x,
-    y: position.y,
-    reactions: { like: 0, insight: 0, risk: 0 },
-    comments: [],
-    authorName: profile.name,
+  commitMutation(`카드 추가: ${title}`, () => {
+    shared.posts.push({
+      id: crypto.randomUUID(),
+      title,
+      content,
+      tags,
+      section,
+      type: els.typeInput.value,
+      priority: els.priorityInput.value,
+      status: els.statusInput.value,
+      moderationStatus: isPending ? "pending" : "live",
+      evidenceUrl,
+      attachments,
+      createdAt: new Date().toISOString(),
+      x: position.x,
+      y: position.y,
+      reactions: { like: 0, insight: 0, risk: 0 },
+      comments: [],
+      authorName: profile.name,
+    });
   });
 
   els.titleInput.value = "";
@@ -957,7 +1370,6 @@ async function addPost() {
   els.addPostBtn.disabled = false;
   els.addPostBtn.textContent = "카드 추가";
   setComposerFeedback(`"${title}" 카드를 추가했습니다.`, "success");
-  persistAndRender();
 }
 
 function getNextCanvasPosition() {
@@ -1005,9 +1417,52 @@ function addSection() {
     return;
   }
 
-  shared.sections.push(nextSection);
+  commitMutation(`섹션 추가: ${nextSection}`, () => {
+    shared.sections.push(nextSection);
+  });
   els.newSectionInput.value = "";
-  persistAndRender();
+}
+
+function createTemplatePost(templatePost) {
+  const position = getNextCanvasPosition();
+  return {
+    id: crypto.randomUUID(),
+    title: templatePost.title,
+    content: templatePost.content,
+    tags: templatePost.tags || [],
+    section: templatePost.section,
+    type: templatePost.type,
+    priority: templatePost.priority,
+    status: templatePost.status,
+    moderationStatus: "live",
+    evidenceUrl: "",
+    attachments: [],
+    createdAt: new Date().toISOString(),
+    x: position.x,
+    y: position.y,
+    reactions: { like: 0, insight: 0, risk: 0 },
+    comments: [],
+    authorName: profile.name,
+  };
+}
+
+function applyTemplate(templateId) {
+  const template = BOARD_TEMPLATES.find((item) => item.id === templateId);
+  if (!template) return;
+
+  const ok = confirm(`"${template.title}" 템플릿 카드 ${template.posts.length}개를 추가할까요?`);
+  if (!ok) return;
+
+  prefs.activeSection = "All";
+  persistPrefs();
+  commitMutation(`템플릿 적용: ${template.title}`, () => {
+    template.sections.forEach((section) => {
+      if (!shared.sections.includes(section)) shared.sections.push(section);
+    });
+    template.posts.forEach((post) => {
+      shared.posts.push(createTemplatePost(post));
+    });
+  });
 }
 
 async function copyShareLink() {
@@ -1103,6 +1558,7 @@ async function importBackup(file) {
     const backup = JSON.parse(text);
     if (!backup?.shared?.posts) throw new Error("Boardly 백업 파일이 아닙니다.");
 
+    const before = cloneSharedState();
     shared = normalizeSharedState(backup.shared);
     prefs = { ...structuredClone(defaultPrefs), ...(backup.prefs || {}) };
     if (backup.profile?.name) {
@@ -1119,6 +1575,8 @@ async function importBackup(file) {
     }
 
     persistPrefs();
+    undoStack.push({ label: "백업 복원", snapshot: before });
+    addActivity("백업 복원");
     persistAndRender();
     alert("백업을 불러왔습니다.");
   } catch (error) {
@@ -1132,30 +1590,23 @@ async function resetDemo() {
   const ok = confirm("현재 로컬 보드 데이터를 데모 상태로 초기화할까요?");
   if (!ok) return;
 
-  const attachments = collectAttachments();
-  for (const attachment of attachments) {
-    await deleteAttachment(attachment.id).catch(() => {});
-  }
-
-  shared = normalizeSharedState(structuredClone(defaultSharedState));
-  prefs = structuredClone(defaultPrefs);
-  persistPrefs();
-  persistAndRender();
+  commitMutation("데모 초기화", () => {
+    shared = normalizeSharedState(structuredClone(defaultSharedState));
+    prefs = structuredClone(defaultPrefs);
+    persistPrefs();
+  });
 }
 
 async function deletePost(postId) {
   const post = shared.posts.find((item) => item.id === postId);
   if (!post) return;
 
-  const ok = confirm(`"${post.title}" 카드를 삭제할까요? 첨부 파일도 이 브라우저에서 삭제됩니다.`);
+  const ok = confirm(`"${post.title}" 카드를 삭제할까요? 되돌리기를 누르면 다시 복구할 수 있습니다.`);
   if (!ok) return;
 
-  for (const attachment of post.attachments) {
-    await deleteAttachment(attachment.id).catch(() => {});
-  }
-
-  shared.posts = shared.posts.filter((item) => item.id !== postId);
-  persistAndRender();
+  commitMutation(`카드 삭제: ${post.title}`, () => {
+    shared.posts = shared.posts.filter((item) => item.id !== postId);
+  });
 }
 
 function csvCell(value) {
@@ -1200,10 +1651,15 @@ function setupDnD() {
     const post = shared.posts.find((item) => item.id === drag.id);
     if (!post) return;
 
-    post.x = Math.max(0, event.clientX - boardRect.left - drag.offsetX);
-    post.y = Math.max(0, event.clientY - boardRect.top - drag.offsetY);
+    const nextX = Math.max(0, event.clientX - boardRect.left - drag.offsetX);
+    const nextY = Math.max(0, event.clientY - boardRect.top - drag.offsetY);
     drag.id = null;
-    persistAndRender();
+    commitMutation(`카드 이동: ${post.title}`, () => {
+      const target = findPost(post.id);
+      if (!target) return;
+      target.x = nextX;
+      target.y = nextY;
+    });
   });
 }
 
@@ -1214,6 +1670,7 @@ function setupEvents() {
   els.exportCsvBtn.addEventListener("click", exportCsv);
   els.exportBackupBtn.addEventListener("click", () => void exportBackup());
   els.resetDemoBtn.addEventListener("click", () => void resetDemo());
+  els.undoBtn.addEventListener("click", undoLastAction);
   els.importBackupInput.addEventListener("change", (event) => {
     const file = event.target.files[0];
     if (file) void importBackup(file);
@@ -1233,6 +1690,42 @@ function setupEvents() {
         void addPost();
       }
     });
+  });
+
+  [els.closeEditBtn, els.cancelEditBtn].forEach((btn) => {
+    btn.addEventListener("click", closeEditDrawer);
+  });
+
+  els.saveEditBtn.addEventListener("click", () => void saveEditedPost());
+
+  els.editOverlay.addEventListener("click", (event) => {
+    if (event.target === els.editOverlay) closeEditDrawer();
+  });
+
+  [els.editTitleInput, els.editContentInput].forEach((input) => {
+    input.addEventListener("input", () => {
+      if (input.getAttribute("aria-invalid") === "true") setEditFieldValidity(input, Boolean(input.value.trim()));
+      if (els.editFeedback.classList.contains("error")) {
+        setEditFeedback("수정 내용을 저장하면 보드에 바로 반영됩니다.");
+      }
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        void saveEditedPost();
+      }
+    });
+  });
+
+  els.editAttachmentInput.addEventListener("change", () => {
+    const file = els.editAttachmentInput.files[0];
+    if (!file) return;
+    setEditFeedback(`${file.name} 파일이 선택됐습니다. 저장하면 첨부됩니다.`);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !els.editOverlay.hidden) closeEditDrawer();
   });
 
   els.layoutOptions.forEach((btn) => {

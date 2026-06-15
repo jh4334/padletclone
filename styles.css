@@ -446,7 +446,8 @@ summary:focus-visible,
 .primary-btn,
 .secondary-btn,
 .icon-btn,
-.tiny-btn {
+.tiny-btn,
+.card-edit-btn {
   min-height: 44px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -460,6 +461,7 @@ summary:focus-visible,
 .secondary-btn:hover,
 .icon-btn:hover,
 .tiny-btn:hover,
+.card-edit-btn:hover,
 .card-delete-btn:hover,
 .reaction-row button:hover {
   transform: translateY(-1px);
@@ -470,6 +472,7 @@ summary:focus-visible,
 .secondary-btn:active,
 .icon-btn:active,
 .tiny-btn:active,
+.card-edit-btn:active,
 .card-delete-btn:active,
 .reaction-row button:active {
   transform: translateY(0);
@@ -484,7 +487,8 @@ summary:focus-visible,
 }
 
 .secondary-btn,
-.icon-btn {
+.icon-btn,
+.card-edit-btn {
   padding: 8px 10px;
 }
 
@@ -644,6 +648,77 @@ textarea:disabled {
   color: var(--accent);
   border-color: rgba(10, 102, 194, 0.35);
   background: var(--accent-soft);
+}
+
+.template-list {
+  display: grid;
+  gap: 8px;
+}
+
+.template-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.88)),
+    radial-gradient(circle at top right, rgba(10, 102, 194, 0.14), transparent 46%);
+  color: var(--ink);
+  padding: 10px;
+  text-align: left;
+}
+
+.template-card strong {
+  font-size: 13px;
+}
+
+.template-card span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.activity-title {
+  align-items: center;
+}
+
+.activity-title > div {
+  display: grid;
+  gap: 2px;
+}
+
+.activity-title .secondary-btn {
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 12px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 7px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.activity-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  padding: 8px;
+}
+
+.activity-item strong {
+  display: block;
+  font-size: 12px;
+}
+
+.activity-item span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .board {
@@ -888,6 +963,17 @@ textarea:disabled {
   font-weight: 800;
 }
 
+.card-edit-btn {
+  flex: none;
+  min-height: 36px;
+  border-radius: 999px;
+  border-color: rgba(10, 102, 194, 0.26);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .priority-chip.P1 {
   color: var(--red);
   background: var(--red-soft);
@@ -1002,6 +1088,115 @@ textarea:disabled {
   padding: 28px;
   color: var(--muted);
   text-align: center;
+}
+
+.edit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  justify-items: end;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.edit-overlay[hidden] {
+  display: none;
+}
+
+.edit-drawer {
+  width: min(520px, 100%);
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 0;
+  border-left: 1px solid rgba(216, 222, 232, 0.92);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+    radial-gradient(circle at top left, rgba(10, 102, 194, 0.13), transparent 38%);
+  box-shadow: -24px 0 52px rgba(23, 36, 52, 0.24);
+}
+
+.edit-head,
+.edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.edit-actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.edit-head h2 {
+  margin-top: 3px;
+  font-size: 18px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.edit-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.edit-subtitle {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.edit-attachment-list {
+  display: grid;
+  gap: 7px;
+}
+
+.edit-attachment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  padding: 8px;
+}
+
+.edit-attachment-item span {
+  min-width: 0;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.edit-attachment-remove {
+  flex: none;
+  min-height: 32px;
+  border: 1px solid rgba(180, 35, 24, 0.2);
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 @media (max-width: 1180px) {

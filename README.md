@@ -7,7 +7,9 @@ Boardly Local is a local-first workspace board for collecting tasks, ideas, deci
 - Local-first storage with optional Supabase sync
 - Canvas, Workflow, Timeline, and Focus layouts
 - Cards with type, status, priority, section, tags, evidence links, comments, and reactions
-- Per-card status changes and deletion
+- Per-card status changes, editing, attachment management, and deletion
+- Board templates for weekly reviews, meetings, and idea exploration
+- Activity log with one-step undo for recent local changes
 - Browser attachment storage through IndexedDB
 - CSV export and JSON backup/restore
 - Responsive desktop and mobile UI
@@ -27,6 +29,7 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 ## Storage Model
 
 - Cards, sections, comments, and reactions are saved to Supabase when configured.
+- Templates, activity history, and card edits are stored inside the board snapshot.
 - A local browser copy is kept in `localStorage` as fallback.
 - Attachments use `IndexedDB`.
 - Attachment file bodies are still saved only in the current browser profile.

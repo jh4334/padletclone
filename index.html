@@ -170,12 +170,31 @@
             </div>
           </section>
 
+          <section class="panel template-panel">
+            <div class="panel-title">
+              <h2>템플릿</h2>
+              <span>반복 작업 빠른 시작</span>
+            </div>
+            <div id="templateList" class="template-list"></div>
+          </section>
+
           <section class="panel">
             <div class="panel-title">
               <h2>결정 기록</h2>
               <span>나중에 다시 볼 결정 모음</span>
             </div>
             <div id="decisionList" class="decision-list"></div>
+          </section>
+
+          <section class="panel activity-panel">
+            <div class="panel-title activity-title">
+              <div>
+                <h2>활동 기록</h2>
+                <span>최근 변경과 되돌리기</span>
+              </div>
+              <button id="undoBtn" class="secondary-btn" type="button" disabled>되돌리기</button>
+            </div>
+            <div id="activityList" class="activity-list" aria-live="polite"></div>
           </section>
         </aside>
 
@@ -240,6 +259,7 @@
               <option value="archived">Archived</option>
             </select>
           </label>
+          <button class="card-edit-btn" type="button">수정</button>
           <button class="card-delete-btn" type="button">삭제</button>
         </div>
         <footer>
@@ -263,6 +283,96 @@
         </footer>
       </article>
     </template>
+
+    <div id="editOverlay" class="edit-overlay" hidden>
+      <section class="edit-drawer" role="dialog" aria-modal="true" aria-labelledby="editDrawerTitle">
+        <header class="edit-head">
+          <div>
+            <p class="eyebrow">카드 편집</p>
+            <h2 id="editDrawerTitle">내용, 상태, 첨부 수정</h2>
+          </div>
+          <button id="closeEditBtn" class="icon-btn" type="button" aria-label="수정 창 닫기">닫기</button>
+        </header>
+
+        <div class="edit-body">
+          <label>
+            제목 <span class="required-mark">필수</span>
+            <input id="editTitleInput" type="text" maxlength="72" aria-describedby="editFeedback" aria-invalid="false">
+          </label>
+
+          <label>
+            내용 <span class="required-mark">필수</span>
+            <textarea id="editContentInput" rows="5" maxlength="700" aria-describedby="editFeedback" aria-invalid="false"></textarea>
+          </label>
+
+          <div class="field-grid">
+            <label>
+              유형
+              <select id="editTypeInput">
+                <option value="idea">Idea</option>
+                <option value="question">Question</option>
+                <option value="resource">Resource</option>
+                <option value="decision">Decision</option>
+              </select>
+            </label>
+
+            <label>
+              상태
+              <select id="editStatusInput">
+                <option value="new">New</option>
+                <option value="discussing">Discussing</option>
+                <option value="blocked">Blocked</option>
+                <option value="decided">Decided</option>
+                <option value="archived">Archived</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label>
+              우선순위
+              <select id="editPriorityInput">
+                <option value="P2">P2</option>
+                <option value="P1">P1</option>
+                <option value="P3">P3</option>
+              </select>
+            </label>
+
+            <label>
+              섹션
+              <select id="editSectionInput"></select>
+            </label>
+          </div>
+
+          <label>
+            근거 링크
+            <input id="editEvidenceInput" type="url" maxlength="220" placeholder="https://...">
+          </label>
+
+          <label>
+            태그
+            <input id="editTagsInput" type="text" placeholder="예: 업무, 결정">
+          </label>
+
+          <div>
+            <div class="edit-subtitle">첨부 관리</div>
+            <div id="editAttachmentList" class="edit-attachment-list"></div>
+          </div>
+
+          <label>
+            첨부 추가
+            <input id="editAttachmentInput" type="file" accept="image/*,.pdf,.csv,.xlsx,.xls,.doc,.docx,.ppt,.pptx,.txt">
+          </label>
+
+          <div id="editFeedback" class="form-feedback" role="status" aria-live="polite">수정 내용을 저장하면 보드에 바로 반영됩니다.</div>
+        </div>
+
+        <footer class="edit-actions">
+          <button id="cancelEditBtn" class="secondary-btn" type="button">취소</button>
+          <button id="saveEditBtn" class="primary-btn" type="button">수정 저장</button>
+        </footer>
+      </section>
+    </div>
 
     <script src="./boardly.config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
