@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Boardly Local - Personal Workspace</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="window-dots" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div>
+            <h1>Boardly Local</h1>
+            <p id="boardSubtitle">내 작업 협업 보드</p>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <label class="control compact">
+            <span>보드</span>
+            <input id="boardIdInput" type="text" readonly>
+          </label>
+
+          <label class="control compact">
+            <span>작성자</span>
+            <input id="displayNameInput" type="text" maxlength="20" placeholder="이름">
+          </label>
+
+          <button id="copyLinkBtn" class="icon-btn" type="button" title="현재 보드 링크 복사" aria-label="현재 보드 링크 복사">링크 복사</button>
+          <button id="exportCsvBtn" class="icon-btn" type="button" title="CSV 내보내기" aria-label="CSV 내보내기">CSV</button>
+          <button id="exportBackupBtn" class="icon-btn" type="button" title="백업 파일 내보내기" aria-label="백업 파일 내보내기">백업</button>
+          <label class="icon-btn file-action" title="백업 파일 불러오기" aria-label="백업 파일 불러오기">
+            복원
+            <input id="importBackupInput" type="file" accept="application/json,.json">
+          </label>
+          <div class="sync-pill" id="syncStatus">Local saved</div>
+        </div>
+      </header>
+
+      <section class="local-notice" aria-label="로컬 저장 안내">
+        <div>
+          <strong>로컬 전용 보드</strong>
+          <span>카드와 첨부는 이 브라우저에만 저장됩니다. 다른 기기나 팀원에게 옮길 때는 백업/복원을 사용하세요.</span>
+        </div>
+        <div class="notice-steps">
+          <span>작업</span>
+          <span>백업</span>
+          <span>복원</span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <aside class="sidebar">
+          <section class="panel health-panel">
+            <div class="panel-title">
+              <h2>로컬 저장</h2>
+              <span id="storageStatus">브라우저 저장소 사용</span>
+            </div>
+            <div class="health-grid">
+              <div>
+                <strong id="storagePosts">0</strong>
+                <span>카드</span>
+              </div>
+              <div>
+                <strong id="storageAttachments">0</strong>
+                <span>첨부</span>
+              </div>
+              <div>
+                <strong id="storageDecisions">0</strong>
+                <span>결정</span>
+              </div>
+            </div>
+            <button id="resetDemoBtn" class="secondary-btn danger" type="button">데모 초기화</button>
+          </section>
+
+          <section class="composer panel">
+            <div class="panel-title">
+              <h2>새 카드</h2>
+              <span id="composerHint">할 일과 결정을 함께 기록</span>
+            </div>
+
+            <label>
+              제목
+              <input id="titleInput" type="text" maxlength="72" placeholder="예: 이번 주 처리할 작업 정리">
+            </label>
+
+            <label>
+              내용
+              <textarea id="contentInput" rows="5" maxlength="700" placeholder="해야 할 일, 참고 내용, 다음 액션을 적어주세요"></textarea>
+            </label>
+
+            <div class="field-grid">
+              <label>
+                유형
+                <select id="typeInput">
+                  <option value="idea">Idea</option>
+                  <option value="question">Question</option>
+                  <option value="resource">Resource</option>
+                  <option value="decision">Decision</option>
+                </select>
+              </label>
+
+              <label>
+                상태
+                <select id="statusInput">
+                  <option value="new">New</option>
+                  <option value="discussing">Discussing</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="decided">Decided</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-grid">
+              <label>
+                우선순위
+                <select id="priorityInput">
+                  <option value="P2">P2</option>
+                  <option value="P1">P1</option>
+                  <option value="P3">P3</option>
+                </select>
+              </label>
+
+              <label>
+                섹션
+                <select id="sectionInput"></select>
+              </label>
+            </div>
+
+            <label>
+              근거 링크
+              <input id="evidenceInput" type="url" maxlength="220" placeholder="https://...">
+            </label>
+
+            <label>
+              태그
+              <input id="tagsInput" type="text" placeholder="예: 업무, 아이디어, 개인">
+            </label>
+
+            <label>
+              첨부 자료
+              <input id="attachmentInput" type="file" accept="image/*,.pdf,.csv,.xlsx,.xls,.doc,.docx,.ppt,.pptx,.txt">
+            </label>
+
+            <div id="attachmentHint" class="file-hint">첨부 파일은 이 브라우저의 IndexedDB에 저장됩니다.</div>
+
+            <button id="addPostBtn" class="primary-btn" type="button">카드 추가</button>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h2>섹션</h2>
+              <span>작업 흐름별 분류</span>
+            </div>
+            <div class="inline-row">
+              <input id="newSectionInput" type="text" maxlength="24" placeholder="새 섹션">
+              <button id="addSectionBtn" class="secondary-btn" type="button">추가</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h2>결정 기록</h2>
+              <span>나중에 다시 볼 결정 모음</span>
+            </div>
+            <div id="decisionList" class="decision-list"></div>
+          </section>
+        </aside>
+
+        <section class="main-stage">
+          <nav class="board-controls">
+            <div class="segmented" role="tablist" aria-label="레이아웃">
+              <button class="layout-option active" type="button" data-layout="canvas">Canvas</button>
+              <button class="layout-option" type="button" data-layout="workflow">Workflow</button>
+              <button class="layout-option" type="button" data-layout="timeline">Timeline</button>
+              <button class="layout-option" type="button" data-layout="focus">Focus</button>
+            </div>
+
+            <label class="control search">
+              <span>검색</span>
+              <input id="searchInput" type="search" placeholder="제목, 내용, 태그, 작성자">
+            </label>
+
+            <label class="control">
+              <span>정렬</span>
+              <select id="sortSelect">
+                <option value="recent">최신순</option>
+                <option value="priority">우선순위</option>
+                <option value="status">상태순</option>
+                <option value="reactions">반응순</option>
+              </select>
+            </label>
+
+            <label class="toggle">
+              <input id="hideArchivedInput" type="checkbox" checked>
+              <span>Archived 숨김</span>
+            </label>
+          </nav>
+
+          <section class="stats-strip" id="statsStrip" aria-label="보드 통계"></section>
+          <div id="sectionTabs" class="section-tabs"></div>
+          <section id="board" class="board canvas" aria-label="협업 보드"></section>
+        </section>
+      </section>
+    </main>
+
+    <template id="postTemplate">
+      <article class="post-card" draggable="true">
+        <header class="card-head">
+          <div>
+            <div class="card-kicker"></div>
+            <h3 class="post-title">제목</h3>
+          </div>
+          <span class="status-badge"></span>
+        </header>
+        <p class="post-content"></p>
+        <a class="evidence-link" href="#" target="_blank" rel="noreferrer">근거 열기</a>
+        <div class="attachment-list"></div>
+        <div class="tag-list"></div>
+        <div class="card-actions" role="group" aria-label="카드 관리">
+          <label class="card-status-control">
+            <span>상태</span>
+            <select class="card-status-select">
+              <option value="new">New</option>
+              <option value="discussing">Discussing</option>
+              <option value="blocked">Blocked</option>
+              <option value="decided">Decided</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <button class="card-delete-btn" type="button">삭제</button>
+        </div>
+        <footer>
+          <div class="meta-row">
+            <span class="author"></span>
+            <time></time>
+          </div>
+          <div class="reaction-row">
+            <button data-reaction="like" type="button" title="동의">동의 <span>0</span></button>
+            <button data-reaction="insight" type="button" title="근거 있음">근거 <span>0</span></button>
+            <button data-reaction="risk" type="button" title="리스크">위험 <span>0</span></button>
+          </div>
+          <details class="comments-panel">
+            <summary>댓글 <span class="comment-count">0</span></summary>
+            <ul class="comment-list"></ul>
+            <div class="comment-form">
+              <input type="text" maxlength="140" placeholder="댓글 입력">
+              <button class="tiny-btn" type="button">등록</button>
+            </div>
+          </details>
+        </footer>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
