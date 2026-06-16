@@ -6,6 +6,7 @@
 
 - 카드/섹션/댓글/반응: Supabase 연결 시 `boardly_boards` 테이블, 연결 전에는 브라우저 `localStorage`
 - 공유 권한: `view_token`, `edit_token`, `owner_id`, `access_updated_at` 컬럼과 보드 스냅샷에 함께 저장
+- 공유 링크: URL의 `token`이 저장된 권한 토큰과 다르면 앱에서 `권한 없음` 상태로 잠긴다.
 - 첨부 파일: 브라우저 `IndexedDB`
 - 백업/복원: 앱 상단 `백업` / `복원`
 
@@ -35,7 +36,7 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 ## 중요한 한계
 
 - 현재 구현은 자동 실시간 충돌 해결이 아니라 마지막 저장이 이기는 스냅샷 동기화입니다.
-- 읽기/편집 토큰은 Supabase 행에 저장되지만, 지금 SQL 정책은 no-login 프로토타입을 위해 공개 상태입니다. 진짜 서버 보안은 로그인 기반 RLS(Row Level Security, 행 수준 보안) 또는 서버/Edge Function 토큰 검증을 붙여야 완성됩니다.
+- 읽기/편집 토큰은 앱에서 검증되고 Supabase 행에도 저장되지만, 지금 SQL 정책은 no-login 프로토타입을 위해 공개 상태입니다. 진짜 서버 보안은 로그인 기반 RLS(Row Level Security, 행 수준 보안) 또는 서버/Edge Function 토큰 검증을 붙여야 완성됩니다.
 - 같은 브라우저/같은 프로필 안에서는 로컬 fallback으로도 계속 저장됩니다.
 - 다른 컴퓨터로 옮기려면 `백업` 파일을 내보내고, 대상 기기에서 `복원` 하면 됩니다.
 - 첨부 파일 본문은 아직 Supabase Storage가 아니라 브라우저 `IndexedDB`에 저장됩니다.

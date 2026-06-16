@@ -60,3 +60,32 @@ Cycle 3 should make share links token-aware in app behavior:
 - Validate the URL `token` against the loaded `view_token` or `edit_token`.
 - Show a clear “권한 없음” state when the token does not match.
 - Keep the app usable locally when Supabase is not configured, but prepare the same logic for future RLS/auth enforcement.
+
+## Cycle 3 - Token-Aware Share Links
+
+### Development
+
+- Added an access gate with `open`, `pending`, and `denied` states.
+- The app now validates the URL `token` against the loaded read/edit token before allowing board interaction.
+- Invalid tokens show a `권한 없음` state and hide board cards, section names, decision records, activity history, and share link values.
+- Export, backup, copy-link, card creation, editing, templates, comments, reactions, and cloud saves now respect the access gate.
+
+### Code Review Notes
+
+- The token check now prevents accidental frontend access with stale or mistyped share links.
+- The implementation avoids exposing valid share tokens in the sidebar when the current token is invalid.
+- This is still a frontend gate. Supabase policies remain public until a server/RLS layer verifies tokens before returning rows.
+
+### Real-User Review
+
+- If someone opens the wrong copied link, they see a clear `권한 없음` state instead of a board that looks editable.
+- A valid read-only link still opens the board for viewing and keeps edit controls disabled.
+- A valid edit link keeps the normal editing workflow intact.
+
+### Next Development Task
+
+Cycle 4 should reduce accidental data loss and collaboration conflicts:
+
+- Add conflict detection using `updated_at` from Supabase before overwriting a cloud snapshot.
+- Show a clear “원격 변경 있음” message when another device changed the board first.
+- Offer safe choices: reload cloud version, keep local version, or export local backup before overwriting.

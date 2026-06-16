@@ -346,6 +346,16 @@ summary:focus-visible,
   background: var(--yellow-soft);
 }
 
+#accessMode.pending {
+  color: var(--blue);
+  background: rgba(83, 138, 255, 0.14);
+}
+
+#accessMode.denied {
+  color: var(--red);
+  background: rgba(255, 95, 86, 0.14);
+}
+
 .copy-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

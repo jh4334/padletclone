@@ -9,6 +9,8 @@ const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const FORBIDDEN_TERMS = ["spam", "hate", "욕설", "광고도배"];
 const ACCESS_TOKEN_LENGTH = 12;
 const READ_ONLY_MESSAGE = "읽기 전용 링크로 접속 중입니다. 편집 링크로 다시 열어야 변경할 수 있습니다.";
+const ACCESS_PENDING_MESSAGE = "공유 링크 권한을 확인 중입니다. 잠시만 기다려주세요.";
+const ACCESS_DENIED_MESSAGE = "권한 없음: 공유 링크의 토큰이 보드 권한과 일치하지 않습니다. 올바른 링크로 다시 열어주세요.";
 
 const STATUSES = ["new", "discussing", "blocked", "decided", "archived"];
 const STATUS_LABELS = {
@@ -226,6 +228,7 @@ const LAYOUT_HELP = {
 const boardlyConfig = window.BOARDLY_CONFIG || {};
 const boardId = getBoardIdFromUrl();
 const accessRole = getAccessRoleFromUrl();
+const requestedAccessToken = getAccessTokenFromUrl();
 const profile = loadProfile();
 
 const els = {
@@ -296,6 +299,7 @@ const els = {
   editFeedback: document.getElementById("editFeedback"),
 };
 
+const hadStoredBoardSnapshot = hasStoredBoardSnapshot();
 let shared = normalizeSharedState(loadBoardSnapshot());
 let prefs = loadPrefs();
 let drag = { id: null, offsetX: 0, offsetY: 0 };
@@ -313,6 +317,9 @@ let cloud = {
   pendingSave: false,
   lastError: "",
 };
+let accessGate = {
+  status: requestedAccessToken && isSupabaseRequested() ? "pending" : "open",
+};
 
 function getBoardIdFromUrl() {
   const url = new URL(window.location.href);
@@ -323,6 +330,19 @@ function getBoardIdFromUrl() {
 function getAccessRoleFromUrl() {
   const url = new URL(window.location.href);
   return url.searchParams.get("role") === "view" ? "view" : "edit";
+}
+
+function getAccessTokenFromUrl() {
+  const url = new URL(window.location.href);
+  return (url.searchParams.get("token") || "").trim();
+}
+
+function hasStoredBoardSnapshot() {
+  try {
+    return Boolean(localStorage.getItem(stateKey()) || localStorage.getItem(legacyStateKey()));
+  } catch {
+    return false;
+  }
 }
 
 function createAccessToken() {
@@ -528,6 +548,51 @@ function getCloudAccessPayload() {
   };
 }
 
+function getExpectedAccessToken() {
+  return accessRole === "view" ? shared.access.viewToken : shared.access.editToken;
+}
+
+function validateAccessToken() {
+  if (!requestedAccessToken) {
+    accessGate.status = "open";
+    return;
+  }
+
+  if (cloud.requested && !cloud.ready && !hadStoredBoardSnapshot) {
+    accessGate.status = cloud.lastError && !cloud.configured ? "open" : "pending";
+    return;
+  }
+
+  if (!cloud.requested && !hadStoredBoardSnapshot) {
+    accessGate.status = "open";
+    return;
+  }
+
+  accessGate.status = requestedAccessToken === getExpectedAccessToken() ? "open" : "denied";
+}
+
+function isAccessDenied() {
+  return accessGate.status === "denied";
+}
+
+function isAccessPending() {
+  return accessGate.status === "pending";
+}
+
+function isAccessRestricted() {
+  return isAccessDenied() || isAccessPending();
+}
+
+function getAccessRestrictionMessage() {
+  if (isAccessDenied()) return ACCESS_DENIED_MESSAGE;
+  if (isAccessPending()) return ACCESS_PENDING_MESSAGE;
+  return "";
+}
+
+function isBoardLocked() {
+  return isReadOnlyMode() || isAccessRestricted();
+}
+
 function isReadOnlyMode() {
   return accessRole === "view";
 }
@@ -541,9 +606,23 @@ function createAccessLink(role) {
 }
 
 function canEditBoard() {
+  if (isAccessRestricted()) {
+    const message = getAccessRestrictionMessage();
+    setComposerFeedback(message, "error");
+    updateSaveStatus(isAccessDenied() ? "Access denied" : "Access pending", isAccessDenied() ? "error" : "warning");
+    return false;
+  }
   if (!isReadOnlyMode()) return true;
   setComposerFeedback(READ_ONLY_MESSAGE, "error");
   updateSaveStatus("Read only", "warning");
+  return false;
+}
+
+function canReadBoard() {
+  if (!isAccessRestricted()) return true;
+  const message = getAccessRestrictionMessage();
+  setComposerFeedback(message, "error");
+  updateSaveStatus(isAccessDenied() ? "Access denied" : "Access pending", isAccessDenied() ? "error" : "warning");
   return false;
 }
 
@@ -633,6 +712,7 @@ async function initializeCloudSync() {
   cloud.client = createCloudClient();
 
   if (!cloud.client) {
+    validateAccessToken();
     updateSaveStatus("Local fallback", "warning");
     renderControls();
     return;
@@ -651,16 +731,24 @@ async function initializeCloudSync() {
 
     if (data?.snapshot) {
       shared = mergeCloudAccess(data.snapshot, data);
+      validateAccessToken();
+      if (isAccessRestricted()) {
+        render();
+        updateSaveStatus(isAccessDenied() ? "Access denied" : "Access pending", isAccessDenied() ? "error" : "warning");
+        return;
+      }
       persistBoardSnapshot({ syncCloud: false });
       render();
       updateSaveStatus("Cloud loaded", "cloud");
       return;
     }
 
+    accessGate.status = "open";
     await saveCloudSnapshot();
   } catch (error) {
     cloud.lastError = error.message || "Supabase 연결 실패";
     cloud.ready = false;
+    validateAccessToken();
     updateSaveStatus("Local fallback", "warning");
     renderControls();
   }
@@ -676,6 +764,7 @@ function scheduleCloudSave() {
 
 async function saveCloudSnapshot() {
   if (!cloud.ready || !cloud.client) return;
+  if (isAccessRestricted() || isReadOnlyMode()) return;
 
   if (cloud.saving) {
     cloud.pendingSave = true;
@@ -839,6 +928,14 @@ function formatBytes(bytes) {
 
 function renderSectionInputs() {
   els.sectionInput.innerHTML = "";
+  if (isAccessRestricted()) {
+    const option = document.createElement("option");
+    option.value = "Inbox";
+    option.textContent = "권한 확인 필요";
+    els.sectionInput.appendChild(option);
+    return;
+  }
+
   shared.sections
     .filter((section) => section !== "All")
     .forEach((section) => {
@@ -855,6 +952,16 @@ function renderSectionInputs() {
 
 function renderSectionTabs() {
   els.sectionTabs.innerHTML = "";
+  if (isAccessRestricted()) {
+    const btn = document.createElement("button");
+    btn.className = "section-tab active";
+    btn.textContent = isAccessDenied() ? "권한 없음" : "확인 중";
+    btn.type = "button";
+    btn.disabled = true;
+    els.sectionTabs.appendChild(btn);
+    return;
+  }
+
   shared.sections.forEach((section) => {
     const btn = document.createElement("button");
     btn.className = `section-tab ${section === prefs.activeSection ? "active" : ""}`;
@@ -870,6 +977,18 @@ function renderSectionTabs() {
 }
 
 function renderStats() {
+  if (isAccessRestricted()) {
+    els.statsStrip.innerHTML = "";
+    const item = document.createElement("div");
+    item.className = "stat-card";
+    item.innerHTML = `<strong>-</strong><span>${isAccessDenied() ? "권한 없음" : "확인 중"}</span>`;
+    els.statsStrip.appendChild(item);
+    els.storagePosts.textContent = "-";
+    els.storageAttachments.textContent = "-";
+    els.storageDecisions.textContent = "-";
+    return;
+  }
+
   const posts = shared.posts;
   const livePosts = posts.filter((post) => post.moderationStatus !== "pending");
   const attachmentCount = posts.reduce((total, post) => total + post.attachments.length, 0);
@@ -895,6 +1014,15 @@ function renderStats() {
 }
 
 function renderDecisionList() {
+  if (isAccessRestricted()) {
+    els.decisionList.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = getAccessRestrictionMessage();
+    els.decisionList.appendChild(empty);
+    return;
+  }
+
   const decisions = shared.posts
     .filter((post) => post.status === "decided" || post.type === "decision")
     .sort(newestFirst)
@@ -934,6 +1062,7 @@ function renderTemplateList() {
     const description = document.createElement("span");
     description.textContent = template.description;
 
+    btn.disabled = isBoardLocked();
     btn.append(title, description);
     btn.addEventListener("click", () => applyTemplate(template.id));
     els.templateList.appendChild(btn);
@@ -943,6 +1072,15 @@ function renderTemplateList() {
 function renderActivityList() {
   els.activityList.innerHTML = "";
   els.undoBtn.disabled = undoStack.length === 0;
+
+  if (isAccessRestricted()) {
+    els.undoBtn.disabled = true;
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = getAccessRestrictionMessage();
+    els.activityList.appendChild(empty);
+    return;
+  }
 
   const activity = Array.isArray(shared.activity) ? shared.activity.slice(0, 10) : [];
   if (activity.length === 0) {
@@ -1012,7 +1150,7 @@ function renderPostCard(post) {
   const statusSelect = fragment.querySelector(".card-status-select");
   const editBtn = fragment.querySelector(".card-edit-btn");
   const deleteBtn = fragment.querySelector(".card-delete-btn");
-  const readonly = isReadOnlyMode();
+  const readonly = isBoardLocked();
 
   card.dataset.id = post.id;
   card.draggable = shared.layout === "canvas" && !readonly;
@@ -1126,9 +1264,15 @@ function appendBoardEmptyState(message) {
 }
 
 function renderBoard() {
-  const posts = filteredPosts();
   els.board.className = `board ${shared.layout}`;
   els.board.innerHTML = "";
+
+  if (isAccessRestricted()) {
+    appendBoardEmptyState(getAccessRestrictionMessage());
+    return;
+  }
+
+  const posts = filteredPosts();
 
   if (posts.length === 0) {
     appendBoardEmptyState("조건에 맞는 카드가 없습니다.");
@@ -1199,6 +1343,17 @@ function renderLayoutHelp() {
 }
 
 function renderAccessPanel() {
+  els.accessMode.classList.remove("readonly", "pending", "denied");
+
+  if (isAccessRestricted()) {
+    els.viewLinkInput.value = "";
+    els.editLinkInput.value = "";
+    els.accessMode.textContent = isAccessDenied() ? "권한 없음" : "확인 중";
+    els.accessMode.classList.add(isAccessDenied() ? "denied" : "pending");
+    els.accessHelpText.textContent = getAccessRestrictionMessage();
+    return;
+  }
+
   els.viewLinkInput.value = createAccessLink("view");
   els.editLinkInput.value = createAccessLink("edit");
 
@@ -1215,7 +1370,8 @@ function renderAccessPanel() {
 }
 
 function applyReadOnlyState() {
-  const readonly = isReadOnlyMode();
+  const readonly = isBoardLocked();
+  const restricted = isAccessRestricted();
   const controls = [
     els.resetDemoBtn,
     els.titleInput,
@@ -1237,7 +1393,16 @@ function applyReadOnlyState() {
     if (control) control.disabled = readonly;
   });
 
-  if (readonly) {
+  els.copyLinkBtn.disabled = restricted;
+  els.copyViewLinkBtn.disabled = restricted;
+  els.copyEditLinkBtn.disabled = restricted;
+  els.exportCsvBtn.disabled = restricted;
+  els.exportBackupBtn.disabled = restricted;
+
+  if (restricted) {
+    els.undoBtn.disabled = true;
+    setComposerFeedback(getAccessRestrictionMessage(), "error");
+  } else if (readonly) {
     els.undoBtn.disabled = true;
     setComposerFeedback(READ_ONLY_MESSAGE, "error");
   } else {
@@ -1246,6 +1411,8 @@ function applyReadOnlyState() {
 }
 
 function getStorageStatusText() {
+  if (isAccessDenied()) return "권한 없음";
+  if (isAccessPending()) return "권한 확인 중";
   if (isReadOnlyMode()) return "읽기 전용 링크";
   if (cloud.ready) return "Supabase + 브라우저 저장";
   if (cloud.requested && !cloud.configured) return "Supabase 키 입력 필요";
@@ -1254,6 +1421,18 @@ function getStorageStatusText() {
 }
 
 function renderStorageModeNotice() {
+  if (isAccessDenied()) {
+    els.storageModeTitle.textContent = "권한 확인 실패";
+    els.storageModeText.textContent = ACCESS_DENIED_MESSAGE;
+    return;
+  }
+
+  if (isAccessPending()) {
+    els.storageModeTitle.textContent = "공유 링크 확인 중";
+    els.storageModeText.textContent = ACCESS_PENDING_MESSAGE;
+    return;
+  }
+
   if (cloud.ready) {
     els.storageModeTitle.textContent = "Supabase 동기화";
     els.storageModeText.textContent = "카드와 보드 상태는 Supabase에 저장되고, 이 브라우저에도 임시 보관됩니다. 첨부 파일 본문은 아직 브라우저 저장소를 사용합니다.";
@@ -1366,6 +1545,7 @@ function validateEditForm() {
 }
 
 function openEditDrawer(postId) {
+  if (!canEditBoard()) return;
   const post = findPost(postId);
   if (!post) return;
 
@@ -1432,6 +1612,7 @@ function renderEditAttachmentList() {
 }
 
 async function saveEditedPost() {
+  if (!canEditBoard()) return;
   const post = findPost(editing.postId);
   if (!post || !validateEditForm()) return;
 
@@ -1480,6 +1661,7 @@ async function saveEditedPost() {
 }
 
 async function addPost() {
+  if (!canEditBoard()) return;
   const title = els.titleInput.value.trim();
   const content = els.contentInput.value.trim();
   const section = els.sectionInput.value;
@@ -1620,6 +1802,7 @@ function createTemplatePost(templatePost) {
 }
 
 function applyTemplate(templateId) {
+  if (!canEditBoard()) return;
   const template = BOARD_TEMPLATES.find((item) => item.id === templateId);
   if (!template) return;
 
@@ -1639,6 +1822,7 @@ function applyTemplate(templateId) {
 }
 
 async function copyShareLink() {
+  if (!canReadBoard()) return;
   const link = createAccessLink(accessRole);
   await copyTextWithAlert(link, cloud.ready
     ? "현재 보드 링크를 복사했습니다. 같은 Supabase 설정을 쓰는 환경에서 같은 보드를 불러옵니다."
@@ -1646,6 +1830,7 @@ async function copyShareLink() {
 }
 
 async function copyAccessLink(role) {
+  if (!canReadBoard()) return;
   const link = createAccessLink(role);
   await copyTextWithAlert(link, role === "view"
     ? "읽기 전용 링크를 복사했습니다."
@@ -1662,6 +1847,7 @@ async function copyTextWithAlert(text, successMessage) {
 }
 
 function exportCsv() {
+  if (!canReadBoard()) return;
   const rows = [
     ["id", "title", "type", "status", "priority", "section", "author", "tags", "reactions", "comments", "attachments", "evidenceUrl", "createdAt"],
     ...shared.posts.map((post) => [
@@ -1686,6 +1872,7 @@ function exportCsv() {
 }
 
 async function exportBackup() {
+  if (!canReadBoard()) return;
   const attachments = [];
   for (const attachment of collectAttachments()) {
     const blob = await getAttachment(attachment.id).catch(() => null);
@@ -1961,6 +2148,7 @@ function setupEvents() {
 function bootstrap() {
   setupEvents();
   resetComposerValidation();
+  validateAccessToken();
   render();
   persistBoardSnapshot({ syncCloud: false });
   void initializeCloudSync();
