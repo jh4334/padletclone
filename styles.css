@@ -118,6 +118,49 @@ button {
   line-height: 1.4;
 }
 
+.conflict-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(182, 117, 0, 0.28);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background:
+    linear-gradient(135deg, rgba(255, 214, 102, 0.22), rgba(255, 255, 255, 0.9)),
+    var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.conflict-panel[hidden] {
+  display: none;
+}
+
+.conflict-panel strong,
+.conflict-panel span {
+  display: block;
+}
+
+.conflict-panel strong {
+  color: #8a5400;
+  font-size: 13px;
+}
+
+.conflict-panel span {
+  margin-top: 3px;
+  color: #5f4309;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.conflict-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .notice-steps {
   display: inline-flex;
   align-items: center;
@@ -1361,9 +1404,18 @@ textarea:disabled {
     flex-direction: column;
   }
 
-  .local-notice {
+  .local-notice,
+  .conflict-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .conflict-actions {
+    justify-content: stretch;
+  }
+
+  .conflict-actions .secondary-btn {
+    flex: 1 1 100%;
   }
 
   .notice-steps {

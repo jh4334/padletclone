@@ -89,3 +89,33 @@ Cycle 4 should reduce accidental data loss and collaboration conflicts:
 - Add conflict detection using `updated_at` from Supabase before overwriting a cloud snapshot.
 - Show a clear “원격 변경 있음” message when another device changed the board first.
 - Offer safe choices: reload cloud version, keep local version, or export local backup before overwriting.
+
+## Cycle 4 - Cloud Conflict Guard
+
+### Development
+
+- Added Supabase `updated_at` tracking through `cloud.lastKnownUpdatedAt`.
+- Cloud saves now check the latest remote row before upserting the local snapshot.
+- If another device saved first, the app blocks overwrite and shows a `원격 변경 있음` conflict panel.
+- Added conflict choices: `원격 불러오기`, `로컬 유지`, and `백업 후 덮어쓰기`.
+
+### Code Review Notes
+
+- The conflict guard prevents silent last-write-wins overwrites in the common two-device case.
+- `원격 불러오기` uses the already-fetched conflicting row when available, avoiding another race-prone read for the basic path.
+- `백업 후 덮어쓰기` intentionally forces the save only after creating a local backup, so the user has a recovery file.
+- This is still snapshot-level conflict detection, not field-level merge.
+
+### Real-User Review
+
+- If a board is open on a laptop and phone, the second saver now gets a visible warning instead of accidentally erasing the first device's changes.
+- The copy explains the tradeoff in plain Korean and gives immediate next actions.
+- Mobile layout stacks the conflict actions so the choices remain tappable.
+
+### Next Development Task
+
+Cycle 5 should improve attachment usefulness:
+
+- Add cloud-ready attachment metadata for future Supabase Storage support.
+- Add image/PDF/file preview states so attached evidence is easier to inspect.
+- Keep current IndexedDB fallback, but make the UI clearly show whether a file body exists only on this browser.

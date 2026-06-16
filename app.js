@@ -11,6 +11,8 @@ const ACCESS_TOKEN_LENGTH = 12;
 const READ_ONLY_MESSAGE = "읽기 전용 링크로 접속 중입니다. 편집 링크로 다시 열어야 변경할 수 있습니다.";
 const ACCESS_PENDING_MESSAGE = "공유 링크 권한을 확인 중입니다. 잠시만 기다려주세요.";
 const ACCESS_DENIED_MESSAGE = "권한 없음: 공유 링크의 토큰이 보드 권한과 일치하지 않습니다. 올바른 링크로 다시 열어주세요.";
+const CLOUD_CONFLICT_TITLE = "원격 변경 있음";
+const CLOUD_CONFLICT_MESSAGE = "다른 기기에서 먼저 저장한 변경이 있습니다. 지금 저장하면 그 변경을 덮어쓸 수 있습니다.";
 
 const STATUSES = ["new", "discussing", "blocked", "decided", "archived"];
 const STATUS_LABELS = {
@@ -274,6 +276,12 @@ const els = {
   boardIdInput: document.getElementById("boardIdInput"),
   displayNameInput: document.getElementById("displayNameInput"),
   syncStatus: document.getElementById("syncStatus"),
+  conflictPanel: document.getElementById("conflictPanel"),
+  conflictTitle: document.getElementById("conflictTitle"),
+  conflictText: document.getElementById("conflictText"),
+  conflictReloadBtn: document.getElementById("conflictReloadBtn"),
+  conflictKeepLocalBtn: document.getElementById("conflictKeepLocalBtn"),
+  conflictBackupOverwriteBtn: document.getElementById("conflictBackupOverwriteBtn"),
   storageStatus: document.getElementById("storageStatus"),
   storageModeTitle: document.getElementById("storageModeTitle"),
   storageModeText: document.getElementById("storageModeText"),
@@ -316,6 +324,8 @@ let cloud = {
   saving: false,
   pendingSave: false,
   lastError: "",
+  lastKnownUpdatedAt: "",
+  conflict: null,
 };
 let accessGate = {
   status: requestedAccessToken && isSupabaseRequested() ? "pending" : "open",
@@ -701,6 +711,60 @@ function createCloudClient() {
   return window.supabase.createClient(url, key);
 }
 
+async function fetchCloudRow() {
+  const { data, error } = await cloud.client
+    .from(cloud.table)
+    .select("snapshot, updated_at, view_token, edit_token, owner_id, access_updated_at")
+    .eq("board_id", boardId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
+function hasCloudConflict() {
+  return Boolean(cloud.conflict);
+}
+
+function clearCloudConflict() {
+  cloud.conflict = null;
+}
+
+function markCloudConflict(row) {
+  cloud.conflict = {
+    remoteRow: row,
+    remoteUpdatedAt: row?.updated_at || "",
+    detectedAt: new Date().toISOString(),
+  };
+  updateSaveStatus("Remote changed", "warning");
+  renderControls();
+}
+
+function rememberCloudVersion(row) {
+  cloud.lastKnownUpdatedAt = row?.updated_at || cloud.lastKnownUpdatedAt || "";
+}
+
+async function loadCloudRow(row, statusText = "Cloud loaded") {
+  if (!row?.snapshot) return false;
+
+  shared = mergeCloudAccess(row.snapshot, row);
+  rememberCloudVersion(row);
+  validateAccessToken();
+  clearCloudConflict();
+  persistBoardSnapshot({ syncCloud: false });
+  render();
+  updateSaveStatus(statusText, "cloud");
+  return true;
+}
+
+async function findRemoteConflict() {
+  if (!cloud.lastKnownUpdatedAt) return null;
+  const row = await fetchCloudRow();
+  if (!row?.updated_at) return null;
+  if (row.updated_at === cloud.lastKnownUpdatedAt) return null;
+  return row;
+}
+
 async function initializeCloudSync() {
   if (!cloud.requested) {
     updateSaveStatus("Local saved", "local");
@@ -721,16 +785,11 @@ async function initializeCloudSync() {
   cloud.ready = true;
 
   try {
-    const { data, error } = await cloud.client
-      .from(cloud.table)
-      .select("snapshot, updated_at, view_token, edit_token, owner_id, access_updated_at")
-      .eq("board_id", boardId)
-      .maybeSingle();
-
-    if (error) throw error;
+    const data = await fetchCloudRow();
 
     if (data?.snapshot) {
       shared = mergeCloudAccess(data.snapshot, data);
+      rememberCloudVersion(data);
       validateAccessToken();
       if (isAccessRestricted()) {
         render();
@@ -762,9 +821,11 @@ function scheduleCloudSave() {
   }, 500);
 }
 
-async function saveCloudSnapshot() {
+async function saveCloudSnapshot(options = {}) {
+  const force = options.force === true;
   if (!cloud.ready || !cloud.client) return;
   if (isAccessRestricted() || isReadOnlyMode()) return;
+  if (hasCloudConflict() && !force) return;
 
   if (cloud.saving) {
     cloud.pendingSave = true;
@@ -775,17 +836,28 @@ async function saveCloudSnapshot() {
   updateSaveStatus("Cloud saving", "syncing");
 
   try {
+    if (!force) {
+      const conflictRow = await findRemoteConflict();
+      if (conflictRow) {
+        markCloudConflict(conflictRow);
+        return;
+      }
+    }
+
+    const savedAt = new Date().toISOString();
     const { error } = await cloud.client
       .from(cloud.table)
       .upsert({
         board_id: boardId,
         snapshot: shared,
         ...getCloudAccessPayload(),
-        updated_at: new Date().toISOString(),
+        updated_at: savedAt,
       }, { onConflict: "board_id" });
 
     if (error) throw error;
 
+    cloud.lastKnownUpdatedAt = savedAt;
+    clearCloudConflict();
     cloud.lastError = "";
     updateSaveStatus("Cloud saved", "cloud");
   } catch (error) {
@@ -924,6 +996,20 @@ function formatBytes(bytes) {
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** index;
   return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatCloudTimestamp(value) {
+  if (!value) return "알 수 없음";
+  try {
+    return new Intl.DateTimeFormat("ko-KR", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
 }
 
 function renderSectionInputs() {
@@ -1325,6 +1411,7 @@ function renderControls() {
   els.displayNameInput.value = profile.name;
   els.storageStatus.textContent = getStorageStatusText();
   renderStorageModeNotice();
+  renderConflictPanel();
   renderAccessPanel();
 
   els.layoutOptions.forEach((btn) => {
@@ -1369,6 +1456,19 @@ function renderAccessPanel() {
   els.accessHelpText.textContent = "편집 링크는 작업용, 읽기 링크는 보기 전용으로 공유하세요.";
 }
 
+function renderConflictPanel() {
+  if (!els.conflictPanel) return;
+
+  if (!hasCloudConflict() || isAccessRestricted()) {
+    els.conflictPanel.hidden = true;
+    return;
+  }
+
+  els.conflictPanel.hidden = false;
+  els.conflictTitle.textContent = CLOUD_CONFLICT_TITLE;
+  els.conflictText.textContent = `${CLOUD_CONFLICT_MESSAGE} 원격 저장 시각: ${formatCloudTimestamp(cloud.conflict.remoteUpdatedAt)}`;
+}
+
 function applyReadOnlyState() {
   const readonly = isBoardLocked();
   const restricted = isAccessRestricted();
@@ -1411,6 +1511,7 @@ function applyReadOnlyState() {
 }
 
 function getStorageStatusText() {
+  if (hasCloudConflict()) return "원격 변경 있음";
   if (isAccessDenied()) return "권한 없음";
   if (isAccessPending()) return "권한 확인 중";
   if (isReadOnlyMode()) return "읽기 전용 링크";
@@ -1421,6 +1522,12 @@ function getStorageStatusText() {
 }
 
 function renderStorageModeNotice() {
+  if (hasCloudConflict()) {
+    els.storageModeTitle.textContent = CLOUD_CONFLICT_TITLE;
+    els.storageModeText.textContent = `${CLOUD_CONFLICT_MESSAGE} 원격 불러오기, 로컬 유지, 백업 후 덮어쓰기 중 하나를 선택하세요.`;
+    return;
+  }
+
   if (isAccessDenied()) {
     els.storageModeTitle.textContent = "권한 확인 실패";
     els.storageModeText.textContent = ACCESS_DENIED_MESSAGE;
@@ -1846,6 +1953,46 @@ async function copyTextWithAlert(text, successMessage) {
   }
 }
 
+async function reloadCloudConflictVersion() {
+  if (!hasCloudConflict() || !cloud.client) return;
+
+  try {
+    updateSaveStatus("Cloud loading", "syncing");
+    const row = cloud.conflict.remoteRow || await fetchCloudRow();
+    const loaded = await loadCloudRow(row, "Cloud reloaded");
+    if (!loaded) throw new Error("원격 보드를 불러올 수 없습니다.");
+  } catch (error) {
+    cloud.lastError = error.message || "원격 불러오기 실패";
+    updateSaveStatus("Cloud error", "error");
+    renderControls();
+  }
+}
+
+function keepLocalConflictVersion() {
+  if (!hasCloudConflict()) return;
+
+  clearCloudConflict();
+  cloud.ready = false;
+  cloud.lastError = "원격 변경이 있어 로컬 버전을 유지합니다.";
+  updateSaveStatus("Local kept", "warning");
+  renderControls();
+}
+
+async function backupAndOverwriteCloudConflict() {
+  if (!hasCloudConflict() || !canReadBoard()) return;
+
+  try {
+    await exportBackup();
+    clearCloudConflict();
+    cloud.ready = true;
+    await saveCloudSnapshot({ force: true });
+  } catch (error) {
+    cloud.lastError = error.message || "백업 후 덮어쓰기 실패";
+    updateSaveStatus("Cloud error", "error");
+    renderControls();
+  }
+}
+
 function exportCsv() {
   if (!canReadBoard()) return;
   const rows = [
@@ -2045,6 +2192,9 @@ function setupEvents() {
   els.copyLinkBtn.addEventListener("click", copyShareLink);
   els.copyViewLinkBtn.addEventListener("click", () => void copyAccessLink("view"));
   els.copyEditLinkBtn.addEventListener("click", () => void copyAccessLink("edit"));
+  els.conflictReloadBtn.addEventListener("click", () => void reloadCloudConflictVersion());
+  els.conflictKeepLocalBtn.addEventListener("click", keepLocalConflictVersion);
+  els.conflictBackupOverwriteBtn.addEventListener("click", () => void backupAndOverwriteCloudConflict());
   els.exportCsvBtn.addEventListener("click", exportCsv);
   els.exportBackupBtn.addEventListener("click", () => void exportBackup());
   els.resetDemoBtn.addEventListener("click", () => void resetDemo());
