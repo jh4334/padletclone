@@ -2,6 +2,15 @@
 
 Boardly Local is a local-first workspace board for collecting tasks, ideas, decisions, links, comments, reactions, and attachments. It can run locally only, or sync board data through Supabase.
 
+## Product Shape
+
+Boardly Local is not only a Padlet clone and not only a workflow tool. It is a Padlet-style collection board with workflow views layered on top:
+
+- Use `Canvas` like Padlet to collect ideas, links, files, comments, and reactions.
+- Use `Workflow` to move cards through status-based execution.
+- Use `Timeline` to review the record chronologically.
+- Use `Focus` to isolate important, blocked, or decided cards.
+
 ## Features
 
 - Local-first storage with optional Supabase sync

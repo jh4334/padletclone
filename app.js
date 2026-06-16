@@ -197,6 +197,29 @@ const BOARD_TEMPLATES = [
   },
 ];
 
+const LAYOUT_HELP = {
+  canvas: {
+    badge: "Canvas",
+    title: "Canvas = 패들렛처럼 자유 수집",
+    text: "패들렛처럼 카드를 보드 위에 자유롭게 배치해 아이디어, 자료, 링크, 댓글을 빠르게 모읍니다.",
+  },
+  workflow: {
+    badge: "Workflow",
+    title: "Workflow = 상태별 실행 흐름",
+    text: "New, Discussing, Blocked, Decided, Archived 상태별로 일을 옮기며 진행 흐름을 봅니다.",
+  },
+  timeline: {
+    badge: "Timeline",
+    title: "Timeline = 시간순 기록 보기",
+    text: "최신 카드와 결정 흐름을 시간순으로 훑어 보며 언제 무엇이 쌓였는지 확인합니다.",
+  },
+  focus: {
+    badge: "Focus",
+    title: "Focus = 중요한 것만 보기",
+    text: "우선순위 P1, 막힘, 결정 카드만 남겨 지금 봐야 할 중요한 내용에 집중합니다.",
+  },
+};
+
 const boardlyConfig = window.BOARDLY_CONFIG || {};
 const boardId = getBoardIdFromUrl();
 const profile = loadProfile();
@@ -232,6 +255,9 @@ const els = {
   board: document.getElementById("board"),
   sectionTabs: document.getElementById("sectionTabs"),
   boardSubtitle: document.getElementById("boardSubtitle"),
+  layoutHelpBadge: document.getElementById("layoutHelpBadge"),
+  layoutHelpTitle: document.getElementById("layoutHelpTitle"),
+  layoutHelpText: document.getElementById("layoutHelpText"),
   statsStrip: document.getElementById("statsStrip"),
   postTemplate: document.getElementById("postTemplate"),
   boardIdInput: document.getElementById("boardIdInput"),
@@ -1071,6 +1097,15 @@ function renderControls() {
   els.layoutOptions.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.layout === shared.layout);
   });
+
+  renderLayoutHelp();
+}
+
+function renderLayoutHelp() {
+  const help = LAYOUT_HELP[shared.layout] || LAYOUT_HELP.canvas;
+  els.layoutHelpBadge.textContent = help.badge;
+  els.layoutHelpTitle.textContent = help.title;
+  els.layoutHelpText.textContent = help.text;
 }
 
 function getStorageStatusText() {
