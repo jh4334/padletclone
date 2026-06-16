@@ -7,6 +7,8 @@ const ATTACHMENT_STORE = "files";
 const DEFAULT_SUPABASE_TABLE = "boardly_boards";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const FORBIDDEN_TERMS = ["spam", "hate", "욕설", "광고도배"];
+const ACCESS_TOKEN_LENGTH = 12;
+const READ_ONLY_MESSAGE = "읽기 전용 링크로 접속 중입니다. 편집 링크로 다시 열어야 변경할 수 있습니다.";
 
 const STATUSES = ["new", "discussing", "blocked", "decided", "archived"];
 const STATUS_LABELS = {
@@ -80,6 +82,7 @@ const defaultSharedState = {
   sections: ["All", "Inbox", "Idea", "Decision"],
   posts: seedPosts,
   activity: [],
+  access: createAccessConfig(),
 };
 
 const defaultPrefs = {
@@ -222,6 +225,7 @@ const LAYOUT_HELP = {
 
 const boardlyConfig = window.BOARDLY_CONFIG || {};
 const boardId = getBoardIdFromUrl();
+const accessRole = getAccessRoleFromUrl();
 const profile = loadProfile();
 
 const els = {
@@ -230,6 +234,10 @@ const els = {
   sortSelect: document.getElementById("sortSelect"),
   hideArchivedInput: document.getElementById("hideArchivedInput"),
   copyLinkBtn: document.getElementById("copyLinkBtn"),
+  viewLinkInput: document.getElementById("viewLinkInput"),
+  editLinkInput: document.getElementById("editLinkInput"),
+  copyViewLinkBtn: document.getElementById("copyViewLinkBtn"),
+  copyEditLinkBtn: document.getElementById("copyEditLinkBtn"),
   exportCsvBtn: document.getElementById("exportCsvBtn"),
   exportBackupBtn: document.getElementById("exportBackupBtn"),
   importBackupInput: document.getElementById("importBackupInput"),
@@ -266,6 +274,8 @@ const els = {
   storageStatus: document.getElementById("storageStatus"),
   storageModeTitle: document.getElementById("storageModeTitle"),
   storageModeText: document.getElementById("storageModeText"),
+  accessMode: document.getElementById("accessMode"),
+  accessHelpText: document.getElementById("accessHelpText"),
   storagePosts: document.getElementById("storagePosts"),
   storageAttachments: document.getElementById("storageAttachments"),
   storageDecisions: document.getElementById("storageDecisions"),
@@ -308,6 +318,30 @@ function getBoardIdFromUrl() {
   const url = new URL(window.location.href);
   const id = (url.searchParams.get("board") || "my-workspace").trim();
   return id.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 48) || "my-workspace";
+}
+
+function getAccessRoleFromUrl() {
+  const url = new URL(window.location.href);
+  return url.searchParams.get("role") === "view" ? "view" : "edit";
+}
+
+function createAccessToken() {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, ACCESS_TOKEN_LENGTH);
+}
+
+function createAccessConfig() {
+  return {
+    viewToken: createAccessToken(),
+    editToken: createAccessToken(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeAccess(access) {
+  return {
+    ...createAccessConfig(),
+    ...(access && typeof access === "object" ? access : {}),
+  };
 }
 
 function stateKey() {
@@ -405,6 +439,7 @@ function normalizeSharedState(value) {
     activity: Array.isArray(value?.activity)
       ? value.activity.map(normalizeActivityEntry).filter(Boolean).slice(0, ACTIVITY_LIMIT)
       : [],
+    access: normalizeAccess(value?.access),
   };
 
   for (const post of merged.posts) {
@@ -468,6 +503,25 @@ function persistBoardSnapshot(options = {}) {
   }
 }
 
+function isReadOnlyMode() {
+  return accessRole === "view";
+}
+
+function createAccessLink(role) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("board", boardId);
+  url.searchParams.set("role", role);
+  url.searchParams.set("token", role === "view" ? shared.access.viewToken : shared.access.editToken);
+  return url.toString();
+}
+
+function canEditBoard() {
+  if (!isReadOnlyMode()) return true;
+  setComposerFeedback(READ_ONLY_MESSAGE, "error");
+  updateSaveStatus("Read only", "warning");
+  return false;
+}
+
 function cloneSharedState(value = shared) {
   return structuredClone(value);
 }
@@ -489,6 +543,7 @@ function addActivity(label) {
 }
 
 function commitMutation(label, mutate) {
+  if (!canEditBoard()) return null;
   const before = cloneSharedState();
   const result = mutate();
   undoStack.push({ label, snapshot: before });
@@ -931,9 +986,10 @@ function renderPostCard(post) {
   const statusSelect = fragment.querySelector(".card-status-select");
   const editBtn = fragment.querySelector(".card-edit-btn");
   const deleteBtn = fragment.querySelector(".card-delete-btn");
+  const readonly = isReadOnlyMode();
 
   card.dataset.id = post.id;
-  card.draggable = shared.layout === "canvas";
+  card.draggable = shared.layout === "canvas" && !readonly;
   titleEl.textContent = post.title;
   contentEl.textContent = post.content;
   kickerEl.textContent = getCardKicker(post);
@@ -943,6 +999,11 @@ function renderPostCard(post) {
   statusBadge.textContent = STATUS_LABELS[badgeStatus] || badgeStatus;
   statusBadge.classList.add(`status-${badgeStatus}`);
   statusSelect.value = post.status;
+  statusSelect.disabled = readonly;
+  editBtn.disabled = readonly;
+  deleteBtn.disabled = readonly;
+  commentInput.disabled = readonly;
+  commentBtn.disabled = readonly;
 
   timeEl.textContent = new Intl.DateTimeFormat("ko-KR", {
     month: "short",
@@ -986,6 +1047,7 @@ function renderPostCard(post) {
   fragment.querySelectorAll(".reaction-row button").forEach((btn) => {
     const key = btn.dataset.reaction;
     btn.querySelector("span").textContent = String(post.reactions[key] || 0);
+    btn.disabled = readonly;
     btn.addEventListener("click", () => {
       commitMutation(`반응 추가: ${post.title}`, () => {
         const target = findPost(post.id);
@@ -1093,12 +1155,14 @@ function renderControls() {
   els.displayNameInput.value = profile.name;
   els.storageStatus.textContent = getStorageStatusText();
   renderStorageModeNotice();
+  renderAccessPanel();
 
   els.layoutOptions.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.layout === shared.layout);
   });
 
   renderLayoutHelp();
+  applyReadOnlyState();
 }
 
 function renderLayoutHelp() {
@@ -1108,7 +1172,55 @@ function renderLayoutHelp() {
   els.layoutHelpText.textContent = help.text;
 }
 
+function renderAccessPanel() {
+  els.viewLinkInput.value = createAccessLink("view");
+  els.editLinkInput.value = createAccessLink("edit");
+
+  if (isReadOnlyMode()) {
+    els.accessMode.textContent = "읽기 전용";
+    els.accessMode.classList.add("readonly");
+    els.accessHelpText.textContent = READ_ONLY_MESSAGE;
+    return;
+  }
+
+  els.accessMode.textContent = "편집 가능";
+  els.accessMode.classList.remove("readonly");
+  els.accessHelpText.textContent = "편집 링크는 작업용, 읽기 링크는 보기 전용으로 공유하세요.";
+}
+
+function applyReadOnlyState() {
+  const readonly = isReadOnlyMode();
+  const controls = [
+    els.resetDemoBtn,
+    els.titleInput,
+    els.contentInput,
+    els.typeInput,
+    els.statusInput,
+    els.priorityInput,
+    els.sectionInput,
+    els.evidenceInput,
+    els.tagsInput,
+    els.attachmentInput,
+    els.addPostBtn,
+    els.newSectionInput,
+    els.addSectionBtn,
+    els.importBackupInput,
+  ];
+
+  controls.forEach((control) => {
+    if (control) control.disabled = readonly;
+  });
+
+  if (readonly) {
+    els.undoBtn.disabled = true;
+    setComposerFeedback(READ_ONLY_MESSAGE, "error");
+  } else {
+    els.undoBtn.disabled = undoStack.length === 0;
+  }
+}
+
 function getStorageStatusText() {
+  if (isReadOnlyMode()) return "읽기 전용 링크";
   if (cloud.ready) return "Supabase + 브라우저 저장";
   if (cloud.requested && !cloud.configured) return "Supabase 키 입력 필요";
   if (cloud.requested && cloud.lastError) return "Supabase 연결 대기";
@@ -1501,14 +1613,25 @@ function applyTemplate(templateId) {
 }
 
 async function copyShareLink() {
-  const link = `${location.origin}${location.pathname}?board=${encodeURIComponent(boardId)}`;
+  const link = createAccessLink(accessRole);
+  await copyTextWithAlert(link, cloud.ready
+    ? "현재 보드 링크를 복사했습니다. 같은 Supabase 설정을 쓰는 환경에서 같은 보드를 불러옵니다."
+    : "현재 보드 링크를 복사했습니다. Supabase 연결 전에는 데이터가 이 브라우저 안에만 있습니다.");
+}
+
+async function copyAccessLink(role) {
+  const link = createAccessLink(role);
+  await copyTextWithAlert(link, role === "view"
+    ? "읽기 전용 링크를 복사했습니다."
+    : "편집 링크를 복사했습니다.");
+}
+
+async function copyTextWithAlert(text, successMessage) {
   try {
-    await navigator.clipboard.writeText(link);
-    alert(cloud.ready
-      ? "현재 보드 링크를 복사했습니다. 같은 Supabase 설정을 쓰는 환경에서 같은 보드를 불러옵니다."
-      : "현재 보드 링크를 복사했습니다. Supabase 연결 전에는 데이터가 이 브라우저 안에만 있습니다.");
+    await navigator.clipboard.writeText(text);
+    alert(successMessage);
   } catch {
-    alert(`복사 실패. 수동으로 복사하세요: ${link}`);
+    alert(`복사 실패. 수동으로 복사하세요: ${text}`);
   }
 }
 
@@ -1588,6 +1711,11 @@ function dataUrlToBlob(dataUrl) {
 }
 
 async function importBackup(file) {
+  if (!canEditBoard()) {
+    els.importBackupInput.value = "";
+    return;
+  }
+
   try {
     const text = await file.text();
     const backup = JSON.parse(text);
@@ -1702,6 +1830,8 @@ function setupEvents() {
   els.addPostBtn.addEventListener("click", () => void addPost());
   els.addSectionBtn.addEventListener("click", addSection);
   els.copyLinkBtn.addEventListener("click", copyShareLink);
+  els.copyViewLinkBtn.addEventListener("click", () => void copyAccessLink("view"));
+  els.copyEditLinkBtn.addEventListener("click", () => void copyAccessLink("edit"));
   els.exportCsvBtn.addEventListener("click", exportCsv);
   els.exportBackupBtn.addEventListener("click", () => void exportBackup());
   els.resetDemoBtn.addEventListener("click", () => void resetDemo());

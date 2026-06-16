@@ -327,6 +327,42 @@ summary:focus-visible,
   font-size: 11px;
 }
 
+.panel-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+#accessMode {
+  color: var(--green);
+  border-radius: 999px;
+  background: var(--green-soft);
+  padding: 3px 7px;
+  font-weight: 900;
+}
+
+#accessMode.readonly {
+  color: var(--yellow);
+  background: var(--yellow-soft);
+}
+
+.copy-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.share-field {
+  display: grid;
+  gap: 6px;
+}
+
+.copy-field input {
+  color: #344054;
+  background: var(--panel-soft);
+  font-size: 11px;
+}
+
 .file-hint {
   color: var(--muted);
   font-size: 11px;
