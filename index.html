@@ -172,6 +172,18 @@
                 </label>
               </div>
 
+              <div class="field-grid">
+                <label>
+                  담당자
+                  <input id="assigneeInput" type="text" maxlength="40" placeholder="예: 지훈">
+                </label>
+
+                <label>
+                  마감일
+                  <input id="dueDateInput" type="date">
+                </label>
+              </div>
+
               <label>
                 근거 링크
                 <input id="evidenceInput" type="url" maxlength="220" placeholder="https://...">
@@ -330,6 +342,7 @@
           <span class="status-badge"></span>
         </header>
         <p class="post-content"></p>
+        <div class="card-work-meta"></div>
         <a class="evidence-link" href="#" target="_blank" rel="noreferrer">근거 열기</a>
         <div class="attachment-list"></div>
         <div class="tag-list"></div>
@@ -426,6 +439,18 @@
             <label>
               섹션
               <select id="editSectionInput"></select>
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label>
+              담당자
+              <input id="editAssigneeInput" type="text" maxlength="40" placeholder="예: 지훈">
+            </label>
+
+            <label>
+              마감일
+              <input id="editDueDateInput" type="date">
             </label>
           </div>
 

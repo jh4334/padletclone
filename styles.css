@@ -851,7 +851,7 @@ textarea:disabled {
 
 .today-dashboard {
   display: grid;
-  grid-template-columns: repeat(5, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
 }
 
@@ -1120,6 +1120,46 @@ textarea:disabled {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.card-work-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.card-work-meta[hidden] {
+  display: none;
+}
+
+.work-chip {
+  flex: none;
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: #344054;
+  background: rgba(238, 242, 246, 0.95);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.work-chip.assignee {
+  color: #075985;
+  background: #e0f2fe;
+}
+
+.work-chip.due {
+  color: #475467;
+  background: #f2f4f7;
+}
+
+.work-chip.overdue {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.work-chip.due-soon {
+  color: var(--yellow);
+  background: var(--yellow-soft);
 }
 
 .status-badge,

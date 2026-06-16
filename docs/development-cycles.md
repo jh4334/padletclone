@@ -206,3 +206,32 @@ Cycle 8 should make team execution clearer:
 - Add optional assignee and due date fields to cards.
 - Show overdue and due-soon indicators on cards and in the dashboard.
 - Include assignee/due date in backup, CSV export, and edit flows.
+
+## Cycle 8 - Assignee And Due Dates
+
+### Development
+
+- Added optional `담당자` and `마감일` fields to the card composer and edit drawer.
+- Cards now show compact work chips for assignee, normal due date, overdue, and due-soon states.
+- The `오늘 볼 것` dashboard now includes `기한 초과` and `기한 임박`.
+- CSV export now includes `assignee` and `dueDate` columns. JSON backup/restore already carries them through the board snapshot.
+
+### Code Review Notes
+
+- Due warnings ignore `decided` and `archived` cards so completed work does not stay noisy.
+- Date comparison uses the `YYYY-MM-DD` value from the date input, avoiding time-of-day drift.
+- Assignee and due date values are normalized when old snapshots load, when cards are created, and when cards are edited.
+
+### Real-User Review
+
+- A user can now tell who owns a card without opening the edit drawer.
+- The dashboard highlights time-sensitive work separately from generic priority.
+- CSV export is more useful for weekly review or spreadsheet follow-up because owner and due date travel with the card.
+
+### Next Development Task
+
+Cycle 9 should improve collaboration traceability:
+
+- Expand activity log entries with card title, action type, and important field changes.
+- Let users filter or scan recent activity by changed card.
+- Keep undo simple, but make the activity list more useful as a review history.

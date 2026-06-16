@@ -16,6 +16,7 @@ Boardly Local is not only a Padlet clone and not only a workflow tool. It is a P
 - Local-first storage with optional Supabase sync
 - Canvas, Workflow, Timeline, and Focus layouts
 - Cards with type, status, priority, section, tags, evidence links, comments, and reactions
+- Optional card assignee and due date fields with overdue and due-soon indicators
 - Per-card status changes, editing, attachment management, and deletion
 - Separate read-only and edit sharing links for safer collaboration handoff
 - Share links validate their URL token against the board's loaded access metadata and show a no-access state on mismatch
@@ -24,7 +25,7 @@ Boardly Local is not only a Padlet clone and not only a workflow tool. It is a P
 - Activity log with one-step undo for recent local changes
 - Attachment preview cards with file type, local-only status, and IndexedDB body availability
 - Saved quick filters for important, blocked, decided, and attachment-backed cards
-- Today dashboard for blocked, important, recent decision, attachment-backed, and stale unfinished cards
+- Today dashboard for blocked, important, recent decision, attachment-backed, overdue, due-soon, and stale unfinished cards
 - CSV export and JSON backup/restore
 - Responsive desktop and mobile UI
 
@@ -44,6 +45,7 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 
 - Cards, sections, comments, and reactions are saved to Supabase when configured.
 - Templates, activity history, and card edits are stored inside the board snapshot.
+- Assignee and due date fields are stored with each card, included in JSON backup/restore, and exported to CSV.
 - Before saving to Supabase, the app checks the latest `updated_at` value and shows a conflict panel if another device saved first.
 - Read-only/edit share tokens are saved in both the board snapshot and Supabase row metadata.
 - Read-only/edit links are currently enforced in the frontend after the board metadata is loaded. Treat them as a collaboration UX guard, not as a complete server-side security boundary until auth/RLS or a trusted server check is added.

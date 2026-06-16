@@ -49,6 +49,7 @@ const CANVAS_START_Y = 30;
 const ACTIVITY_LIMIT = 50;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const STALE_UNFINISHED_DAYS = 7;
+const DUE_SOON_DAYS = 2;
 const QUICK_FILTERS = [
   { id: "important", label: "중요", matches: (post) => post.priority === "P1" },
   { id: "blocked", label: "막힘", matches: (post) => post.status === "blocked" },
@@ -60,6 +61,8 @@ const TODAY_DASHBOARD_ITEMS = [
   { id: "blocked", label: "막힘", description: "도움이 필요한 일", matches: (post) => post.status === "blocked", quickFilterId: "blocked" },
   { id: "decided", label: "최근 결정", description: "7일 이내 결정", matches: isRecentDecision, quickFilterId: "" },
   { id: "attachments", label: "첨부 있음", description: "근거 자료 포함", matches: (post) => post.attachments.length > 0, quickFilterId: "attachments" },
+  { id: "overdue", label: "기한 초과", description: "마감일 지남", matches: isOverdue, quickFilterId: "" },
+  { id: "dueSoon", label: "기한 임박", description: "2일 이내 마감", matches: isDueSoon, quickFilterId: "" },
   { id: "stale", label: "오래된 미완료", description: "7일 이상 방치", matches: isStaleUnfinished, quickFilterId: "" },
 ];
 
@@ -282,6 +285,8 @@ const els = {
   typeInput: document.getElementById("typeInput"),
   statusInput: document.getElementById("statusInput"),
   priorityInput: document.getElementById("priorityInput"),
+  assigneeInput: document.getElementById("assigneeInput"),
+  dueDateInput: document.getElementById("dueDateInput"),
   evidenceInput: document.getElementById("evidenceInput"),
   attachmentInput: document.getElementById("attachmentInput"),
   attachmentHint: document.getElementById("attachmentHint"),
@@ -330,6 +335,8 @@ const els = {
   editStatusInput: document.getElementById("editStatusInput"),
   editPriorityInput: document.getElementById("editPriorityInput"),
   editSectionInput: document.getElementById("editSectionInput"),
+  editAssigneeInput: document.getElementById("editAssigneeInput"),
+  editDueDateInput: document.getElementById("editDueDateInput"),
   editEvidenceInput: document.getElementById("editEvidenceInput"),
   editTagsInput: document.getElementById("editTagsInput"),
   editAttachmentList: document.getElementById("editAttachmentList"),
@@ -499,6 +506,17 @@ function normalizeActivityEntry(entry) {
   };
 }
 
+function normalizeAssignee(value) {
+  return String(value || "").trim().slice(0, 40);
+}
+
+function normalizeDueDate(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "";
+  const date = new Date(`${text}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? "" : text;
+}
+
 function normalizePost(post, index) {
   const legacyPending = post.status === "pending";
   const status = STATUSES.includes(post.status) ? post.status : legacyPending ? "new" : "new";
@@ -516,6 +534,8 @@ function normalizePost(post, index) {
     moderationStatus,
     evidenceUrl: post.evidenceUrl || "",
     attachments: Array.isArray(post.attachments) ? post.attachments.map(normalizeAttachment).filter(Boolean) : [],
+    assignee: normalizeAssignee(post.assignee),
+    dueDate: normalizeDueDate(post.dueDate),
     createdAt: post.createdAt || new Date().toISOString(),
     x: Number.isFinite(post.x) ? post.x : 40 + index * 28,
     y: Number.isFinite(post.y) ? post.y : 40 + index * 28,
@@ -1008,12 +1028,49 @@ function ageInDays(post) {
   return (Date.now() - created) / MS_PER_DAY;
 }
 
+function getTodayDateString() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function isUnfinished(post) {
+  return !["decided", "archived"].includes(post.status);
+}
+
 function isRecentDecision(post) {
   return (post.status === "decided" || post.type === "decision") && ageInDays(post) <= STALE_UNFINISHED_DAYS;
 }
 
 function isStaleUnfinished(post) {
-  return !["decided", "archived"].includes(post.status) && ageInDays(post) >= STALE_UNFINISHED_DAYS;
+  return isUnfinished(post) && ageInDays(post) >= STALE_UNFINISHED_DAYS;
+}
+
+function isOverdue(post) {
+  return isUnfinished(post) && Boolean(post.dueDate) && post.dueDate < getTodayDateString();
+}
+
+function isDueSoon(post) {
+  const today = getTodayDateString();
+  return isUnfinished(post)
+    && Boolean(post.dueDate)
+    && post.dueDate >= today
+    && post.dueDate <= addDays(today, DUE_SOON_DAYS);
+}
+
+function getDueStatus(post) {
+  if (isOverdue(post)) return { className: "overdue", label: "기한 초과" };
+  if (isDueSoon(post)) return { className: "due-soon", label: "기한 임박" };
+  return { className: "", label: "" };
 }
 
 function sortPosts(a, b) {
@@ -1402,6 +1459,7 @@ function renderPostCard(post) {
   const contentEl = fragment.querySelector(".post-content");
   const statusBadge = fragment.querySelector(".status-badge");
   const kickerEl = fragment.querySelector(".card-kicker");
+  const workMeta = fragment.querySelector(".card-work-meta");
   const tagList = fragment.querySelector(".tag-list");
   const evidenceLink = fragment.querySelector(".evidence-link");
   const attachmentList = fragment.querySelector(".attachment-list");
@@ -1422,6 +1480,7 @@ function renderPostCard(post) {
   contentEl.textContent = post.content;
   kickerEl.textContent = getCardKicker(post);
   authorEl.textContent = post.authorName || "익명 팀원";
+  renderCardWorkMeta(post, workMeta);
 
   const badgeStatus = post.moderationStatus === "pending" ? "pending" : post.status;
   statusBadge.textContent = STATUS_LABELS[badgeStatus] || badgeStatus;
@@ -1518,6 +1577,31 @@ function renderPostCard(post) {
   });
 
   return card;
+}
+
+function renderCardWorkMeta(post, container) {
+  container.innerHTML = "";
+  const dueStatus = getDueStatus(post);
+  const items = [];
+
+  if (post.assignee) {
+    items.push({ className: "assignee", text: `담당 ${post.assignee}` });
+  }
+
+  if (post.dueDate) {
+    items.push({
+      className: dueStatus.className ? `due ${dueStatus.className}` : "due",
+      text: dueStatus.label ? `${dueStatus.label} · ${post.dueDate}` : `마감 ${post.dueDate}`,
+    });
+  }
+
+  container.hidden = items.length === 0;
+  items.forEach((item) => {
+    const chip = document.createElement("span");
+    chip.className = `work-chip ${item.className}`;
+    chip.textContent = item.text;
+    container.appendChild(chip);
+  });
 }
 
 function appendBoardEmptyState(message) {
@@ -1720,6 +1804,8 @@ function applyReadOnlyState() {
     els.statusInput,
     els.priorityInput,
     els.sectionInput,
+    els.assigneeInput,
+    els.dueDateInput,
     els.evidenceInput,
     els.tagsInput,
     els.attachmentInput,
@@ -1904,6 +1990,8 @@ function openEditDrawer(postId) {
   els.editStatusInput.value = post.status;
   els.editPriorityInput.value = post.priority;
   els.editSectionInput.value = post.section;
+  els.editAssigneeInput.value = post.assignee || "";
+  els.editDueDateInput.value = post.dueDate || "";
   els.editEvidenceInput.value = post.evidenceUrl || "";
   els.editTagsInput.value = post.tags.join(", ");
   els.editAttachmentInput.value = "";
@@ -1997,6 +2085,8 @@ async function saveEditedPost() {
     target.status = els.editStatusInput.value;
     target.priority = els.editPriorityInput.value;
     target.section = els.editSectionInput.value || "Inbox";
+    target.assignee = normalizeAssignee(els.editAssigneeInput.value);
+    target.dueDate = normalizeDueDate(els.editDueDateInput.value);
     target.evidenceUrl = els.editEvidenceInput.value.trim();
     target.tags = parseTags(els.editTagsInput.value);
     target.attachments = target.attachments
@@ -2014,6 +2104,8 @@ async function addPost() {
   const section = els.sectionInput.value;
   const tags = parseTags(els.tagsInput.value);
   const evidenceUrl = els.evidenceInput.value.trim();
+  const assignee = normalizeAssignee(els.assigneeInput.value);
+  const dueDate = normalizeDueDate(els.dueDateInput.value);
   const attachmentFile = els.attachmentInput.files[0] || null;
 
   if (!validateComposer()) {
@@ -2054,6 +2146,8 @@ async function addPost() {
       status: els.statusInput.value,
       moderationStatus: isPending ? "pending" : "live",
       evidenceUrl,
+      assignee,
+      dueDate,
       attachments,
       createdAt: new Date().toISOString(),
       x: position.x,
@@ -2068,6 +2162,8 @@ async function addPost() {
   els.contentInput.value = "";
   els.tagsInput.value = "";
   els.evidenceInput.value = "";
+  els.assigneeInput.value = "";
+  els.dueDateInput.value = "";
   els.attachmentInput.value = "";
   els.addPostBtn.disabled = false;
   els.addPostBtn.textContent = "카드 추가";
@@ -2238,7 +2334,7 @@ async function backupAndOverwriteCloudConflict() {
 function exportCsv() {
   if (!canReadBoard()) return;
   const rows = [
-    ["id", "title", "type", "status", "priority", "section", "author", "tags", "reactions", "comments", "attachments", "evidenceUrl", "createdAt"],
+    ["id", "title", "type", "status", "priority", "section", "author", "assignee", "dueDate", "tags", "reactions", "comments", "attachments", "evidenceUrl", "createdAt"],
     ...shared.posts.map((post) => [
       post.id,
       post.title,
@@ -2247,6 +2343,8 @@ function exportCsv() {
       post.priority,
       post.section,
       post.authorName,
+      post.assignee,
+      post.dueDate,
       post.tags.join("|"),
       reactionTotal(post),
       post.comments.length,
