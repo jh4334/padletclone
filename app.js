@@ -50,6 +50,21 @@ const ACTIVITY_LIMIT = 50;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const STALE_UNFINISHED_DAYS = 7;
 const DUE_SOON_DAYS = 2;
+const ACTIVITY_ACTION_LABELS = {
+  create: "추가",
+  edit: "수정",
+  status: "상태",
+  comment: "댓글",
+  reaction: "반응",
+  delete: "삭제",
+  move: "이동",
+  section: "섹션",
+  template: "템플릿",
+  restore: "복원",
+  reset: "초기화",
+  undo: "되돌림",
+  general: "기록",
+};
 const QUICK_FILTERS = [
   { id: "important", label: "중요", matches: (post) => post.priority === "P1" },
   { id: "blocked", label: "막힘", matches: (post) => post.status === "blocked" },
@@ -297,6 +312,7 @@ const els = {
   templateList: document.getElementById("templateList"),
   decisionList: document.getElementById("decisionList"),
   activityList: document.getElementById("activityList"),
+  activityFilterInput: document.getElementById("activityFilterInput"),
   undoBtn: document.getElementById("undoBtn"),
   board: document.getElementById("board"),
   sectionTabs: document.getElementById("sectionTabs"),
@@ -498,9 +514,13 @@ function normalizeAttachment(attachment) {
 
 function normalizeActivityEntry(entry) {
   if (!entry || typeof entry !== "object") return null;
+  const actionType = ACTIVITY_ACTION_LABELS[entry.actionType] ? entry.actionType : "general";
   return {
     id: entry.id || crypto.randomUUID(),
     label: entry.label || "변경 사항",
+    actionType,
+    cardTitle: String(entry.cardTitle || "").trim().slice(0, 80),
+    detail: String(entry.detail || "").trim().slice(0, 160),
     actor: entry.actor || "익명 팀원",
     createdAt: entry.createdAt || new Date().toISOString(),
   };
@@ -749,11 +769,19 @@ function findPost(postId) {
   return shared.posts.find((post) => post.id === postId);
 }
 
-function addActivity(label) {
+function createActivityDetail(parts) {
+  return parts.filter(Boolean).join(" · ").slice(0, 160);
+}
+
+function addActivity(label, metadata = {}) {
+  const actionType = ACTIVITY_ACTION_LABELS[metadata.actionType] ? metadata.actionType : "general";
   shared.activity = [
     {
       id: crypto.randomUUID(),
       label,
+      actionType,
+      cardTitle: String(metadata.cardTitle || "").trim().slice(0, 80),
+      detail: String(metadata.detail || "").trim().slice(0, 160),
       actor: profile.name,
       createdAt: new Date().toISOString(),
     },
@@ -761,12 +789,12 @@ function addActivity(label) {
   ].slice(0, ACTIVITY_LIMIT);
 }
 
-function commitMutation(label, mutate) {
+function commitMutation(label, mutate, metadata = {}) {
   if (!canEditBoard()) return null;
   const before = cloneSharedState();
   const result = mutate();
   undoStack.push({ label, snapshot: before });
-  addActivity(label);
+  addActivity(label, metadata);
   persistAndRender();
   return result;
 }
@@ -777,7 +805,7 @@ function undoLastAction() {
 
   closeEditDrawer();
   shared = normalizeSharedState(previous.snapshot);
-  addActivity(`되돌림: ${previous.label}`);
+  addActivity(`되돌림: ${previous.label}`, { actionType: "undo", detail: previous.label });
   persistAndRender();
 }
 
@@ -1071,6 +1099,29 @@ function getDueStatus(post) {
   if (isOverdue(post)) return { className: "overdue", label: "기한 초과" };
   if (isDueSoon(post)) return { className: "due-soon", label: "기한 임박" };
   return { className: "", label: "" };
+}
+
+function getReactionLabel(key) {
+  return { like: "동의", insight: "근거", risk: "위험" }[key] || key;
+}
+
+function summarizeNewCard({ priority, section, assignee, dueDate }) {
+  return createActivityDetail([
+    priority,
+    section,
+    assignee ? `담당 ${assignee}` : "",
+    dueDate ? `마감 ${dueDate}` : "",
+  ]);
+}
+
+function summarizeEditedPost(before, next) {
+  return createActivityDetail([
+    before.status !== next.status ? `${STATUS_LABELS[before.status]} -> ${STATUS_LABELS[next.status]}` : "",
+    before.priority !== next.priority ? `${before.priority} -> ${next.priority}` : "",
+    before.section !== next.section ? `${before.section} -> ${next.section}` : "",
+    before.assignee !== next.assignee ? `담당 ${before.assignee || "없음"} -> ${next.assignee || "없음"}` : "",
+    before.dueDate !== next.dueDate ? `마감 ${before.dueDate || "없음"} -> ${next.dueDate || "없음"}` : "",
+  ]) || "카드 내용 수정";
 }
 
 function sortPosts(a, b) {
@@ -1393,6 +1444,8 @@ function renderTemplateList() {
 function renderActivityList() {
   els.activityList.innerHTML = "";
   els.undoBtn.disabled = undoStack.length === 0;
+  const activityQuery = els.activityFilterInput.value.trim().toLowerCase();
+  els.activityFilterInput.disabled = isAccessRestricted();
 
   if (isAccessRestricted()) {
     els.undoBtn.disabled = true;
@@ -1403,11 +1456,21 @@ function renderActivityList() {
     return;
   }
 
-  const activity = Array.isArray(shared.activity) ? shared.activity.slice(0, 10) : [];
+  const activity = (Array.isArray(shared.activity) ? shared.activity : [])
+    .filter((entry) => {
+      if (!activityQuery) return true;
+      const actionLabel = ACTIVITY_ACTION_LABELS[entry.actionType] || ACTIVITY_ACTION_LABELS.general;
+      return [entry.label, entry.cardTitle, entry.detail, actionLabel]
+        .join(" ")
+        .toLowerCase()
+        .includes(activityQuery);
+    })
+    .slice(0, 10);
+
   if (activity.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = "아직 기록된 변경이 없습니다.";
+    empty.textContent = activityQuery ? "조건에 맞는 활동이 없습니다." : "아직 기록된 변경이 없습니다.";
     els.activityList.appendChild(empty);
     return;
   }
@@ -1415,16 +1478,26 @@ function renderActivityList() {
   activity.forEach((entry) => {
     const item = document.createElement("div");
     item.className = "activity-item";
+    const action = document.createElement("span");
+    action.className = `activity-action ${entry.actionType}`;
+    action.textContent = ACTIVITY_ACTION_LABELS[entry.actionType] || ACTIVITY_ACTION_LABELS.general;
+
     const label = document.createElement("strong");
-    label.textContent = entry.label;
+    label.textContent = entry.cardTitle || entry.label;
+
+    const detail = document.createElement("span");
+    detail.className = "activity-detail";
+    detail.textContent = entry.detail || entry.label;
+
     const meta = document.createElement("span");
+    meta.className = "activity-meta";
     meta.textContent = `${entry.actor} · ${new Intl.DateTimeFormat("ko-KR", {
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(entry.createdAt))}`;
-    item.append(label, meta);
+    item.append(action, label, detail, meta);
     els.activityList.appendChild(item);
   });
 }
@@ -1540,7 +1613,7 @@ function renderPostCard(post) {
         const target = findPost(post.id);
         if (!target) return;
         target.reactions[key] = (target.reactions[key] || 0) + 1;
-      });
+      }, { actionType: "reaction", cardTitle: post.title, detail: getReactionLabel(key) });
     });
   });
 
@@ -1556,15 +1629,20 @@ function renderPostCard(post) {
         text: value,
         createdAt: new Date().toISOString(),
       });
-    });
+    }, { actionType: "comment", cardTitle: post.title, detail: value.slice(0, 80) });
   });
 
   statusSelect.addEventListener("change", (event) => {
     const nextStatus = event.target.value;
     if (post.status === nextStatus) return;
+    const previousStatus = post.status;
     commitMutation(`상태 변경: ${post.title} -> ${STATUS_LABELS[nextStatus]}`, () => {
       const target = findPost(post.id);
       if (target) target.status = nextStatus;
+    }, {
+      actionType: "status",
+      cardTitle: post.title,
+      detail: `${STATUS_LABELS[previousStatus]} -> ${STATUS_LABELS[nextStatus]}`,
     });
   });
 
@@ -2075,6 +2153,14 @@ async function saveEditedPost() {
     }
   }
 
+  const nextPostSummary = {
+    status: els.editStatusInput.value,
+    priority: els.editPriorityInput.value,
+    section: els.editSectionInput.value || "Inbox",
+    assignee: normalizeAssignee(els.editAssigneeInput.value),
+    dueDate: normalizeDueDate(els.editDueDateInput.value),
+  };
+
   commitMutation(`카드 수정: ${nextTitle}`, () => {
     const target = findPost(post.id);
     if (!target) return;
@@ -2082,16 +2168,20 @@ async function saveEditedPost() {
     target.title = nextTitle;
     target.content = nextContent;
     target.type = els.editTypeInput.value;
-    target.status = els.editStatusInput.value;
-    target.priority = els.editPriorityInput.value;
-    target.section = els.editSectionInput.value || "Inbox";
-    target.assignee = normalizeAssignee(els.editAssigneeInput.value);
-    target.dueDate = normalizeDueDate(els.editDueDateInput.value);
+    target.status = nextPostSummary.status;
+    target.priority = nextPostSummary.priority;
+    target.section = nextPostSummary.section;
+    target.assignee = nextPostSummary.assignee;
+    target.dueDate = nextPostSummary.dueDate;
     target.evidenceUrl = els.editEvidenceInput.value.trim();
     target.tags = parseTags(els.editTagsInput.value);
     target.attachments = target.attachments
       .filter((attachment) => !editing.removedAttachmentIds.has(attachment.id));
     if (newAttachment) target.attachments.push(newAttachment);
+  }, {
+    actionType: "edit",
+    cardTitle: nextTitle,
+    detail: summarizeEditedPost(post, nextPostSummary),
   });
 
   closeEditDrawer();
@@ -2156,6 +2246,10 @@ async function addPost() {
       comments: [],
       authorName: profile.name,
     });
+  }, {
+    actionType: "create",
+    cardTitle: title,
+    detail: summarizeNewCard({ priority: els.priorityInput.value, section, assignee, dueDate }),
   });
 
   els.titleInput.value = "";
@@ -2219,7 +2313,7 @@ function addSection() {
 
   commitMutation(`섹션 추가: ${nextSection}`, () => {
     shared.sections.push(nextSection);
-  });
+  }, { actionType: "section", detail: nextSection });
   els.newSectionInput.value = "";
 }
 
@@ -2263,7 +2357,7 @@ function applyTemplate(templateId) {
     template.posts.forEach((post) => {
       shared.posts.push(createTemplatePost(post));
     });
-  });
+  }, { actionType: "template", detail: `${template.posts.length}개 카드` });
 }
 
 async function copyShareLink() {
@@ -2439,7 +2533,7 @@ async function importBackup(file) {
 
     persistPrefs();
     undoStack.push({ label: "백업 복원", snapshot: before });
-    addActivity("백업 복원");
+    addActivity("백업 복원", { actionType: "restore", detail: "백업 파일" });
     persistAndRender();
     alert("백업을 불러왔습니다.");
   } catch (error) {
@@ -2457,7 +2551,7 @@ async function resetDemo() {
     shared = normalizeSharedState(structuredClone(defaultSharedState));
     prefs = structuredClone(defaultPrefs);
     persistPrefs();
-  });
+  }, { actionType: "reset", detail: "데모 상태" });
 }
 
 async function deletePost(postId) {
@@ -2469,7 +2563,7 @@ async function deletePost(postId) {
 
   commitMutation(`카드 삭제: ${post.title}`, () => {
     shared.posts = shared.posts.filter((item) => item.id !== postId);
-  });
+  }, { actionType: "delete", cardTitle: post.title, detail: post.section });
 }
 
 function csvCell(value) {
@@ -2522,6 +2616,10 @@ function setupDnD() {
       if (!target) return;
       target.x = nextX;
       target.y = nextY;
+    }, {
+      actionType: "move",
+      cardTitle: post.title,
+      detail: `${Math.round(nextX)}, ${Math.round(nextY)}`,
     });
   });
 }
@@ -2539,6 +2637,7 @@ function setupEvents() {
   els.exportBackupBtn.addEventListener("click", () => void exportBackup());
   els.resetDemoBtn.addEventListener("click", () => void resetDemo());
   els.undoBtn.addEventListener("click", undoLastAction);
+  els.activityFilterInput.addEventListener("input", renderActivityList);
   els.importBackupInput.addEventListener("change", (event) => {
     const file = event.target.files[0];
     if (file) void importBackup(file);

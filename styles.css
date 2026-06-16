@@ -990,6 +990,22 @@ textarea:disabled {
   font-size: 12px;
 }
 
+.activity-filter {
+  display: grid;
+  gap: 6px;
+}
+
+.activity-filter span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.activity-filter input {
+  min-height: 36px;
+  border-radius: 12px;
+}
+
 .activity-list {
   display: grid;
   gap: 7px;
@@ -1004,16 +1020,31 @@ textarea:disabled {
   padding: 8px;
 }
 
-.activity-item strong {
-  display: block;
-  font-size: 12px;
+.activity-action {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 10px;
+  font-weight: 900;
 }
 
-.activity-item span {
+.activity-item strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.activity-detail,
+.activity-meta {
   display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .board {

@@ -22,7 +22,7 @@ Boardly Local is not only a Padlet clone and not only a workflow tool. It is a P
 - Share links validate their URL token against the board's loaded access metadata and show a no-access state on mismatch
 - Supabase save conflict detection before overwriting a board changed from another device
 - Board templates for weekly reviews, meetings, and idea exploration
-- Activity log with one-step undo for recent local changes
+- Structured activity log with card-title filtering and one-step undo for recent local changes
 - Attachment preview cards with file type, local-only status, and IndexedDB body availability
 - Saved quick filters for important, blocked, decided, and attachment-backed cards
 - Today dashboard for blocked, important, recent decision, attachment-backed, overdue, due-soon, and stale unfinished cards
@@ -45,6 +45,7 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 
 - Cards, sections, comments, and reactions are saved to Supabase when configured.
 - Templates, activity history, and card edits are stored inside the board snapshot.
+- Activity entries store action type, card title, detail, actor, and timestamp for easier review.
 - Assignee and due date fields are stored with each card, included in JSON backup/restore, and exported to CSV.
 - Before saving to Supabase, the app checks the latest `updated_at` value and shows a conflict panel if another device saved first.
 - Read-only/edit share tokens are saved in both the board snapshot and Supabase row metadata.

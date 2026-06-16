@@ -235,3 +235,32 @@ Cycle 9 should improve collaboration traceability:
 - Expand activity log entries with card title, action type, and important field changes.
 - Let users filter or scan recent activity by changed card.
 - Keep undo simple, but make the activity list more useful as a review history.
+
+## Cycle 9 - Structured Activity Trace
+
+### Development
+
+- Added structured activity metadata: `actionType`, `cardTitle`, and `detail`.
+- Added an activity search field so users can filter recent changes by card title or detail text.
+- Activity rows now show an action badge, card title, change detail, actor, and timestamp.
+- Card creation, editing, status changes, comments, reactions, deletion, movement, section/template changes, backup restore, reset, and undo now write richer activity metadata.
+
+### Code Review Notes
+
+- Undo still uses the existing snapshot stack; the richer activity log is display metadata, not a new persistence model.
+- Legacy activity rows are normalized with `general` action type so older backups keep rendering.
+- The filter is a transient review tool and does not mutate board data or user preferences.
+
+### Real-User Review
+
+- A user can now answer “what happened to this card recently?” without reading every activity row.
+- Activity rows are easier to skim because the action type is visually separated from the card title.
+- Structured details make assignee, due date, status, and movement changes easier to audit after a busy session.
+
+### Next Development Task
+
+Cycle 10 should add a final board health layer:
+
+- Add a compact `보드 정리` insight panel that flags empty sections, too many stale cards, overdue work, and missing assignees.
+- Provide one-click cleanup filters for the most useful warnings.
+- Use it as the final user-facing polish pass before marking the 10-cycle loop complete.
