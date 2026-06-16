@@ -712,7 +712,7 @@ textarea:disabled {
   min-height: 0;
   padding: 12px;
   display: grid;
-  grid-template-rows: auto auto auto auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto auto auto auto 1fr;
   gap: 10px;
 }
 
@@ -742,7 +742,8 @@ textarea:disabled {
 
 .mode-guide,
 .layout-help,
-.today-panel {
+.today-panel,
+.board-health-panel {
   border: 1px solid var(--line);
   border-radius: 12px;
   background:
@@ -822,26 +823,30 @@ textarea:disabled {
   font-weight: 900;
 }
 
-.today-panel {
+.today-panel,
+.board-health-panel {
   display: grid;
   gap: 10px;
   padding: 12px;
 }
 
-.today-panel-head {
+.today-panel-head,
+.board-health-head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 14px;
 }
 
-.today-panel-head h2 {
+.today-panel-head h2,
+.board-health-head h2 {
   margin-top: 2px;
   font-size: 15px;
   line-height: 1.2;
 }
 
-.today-panel-head p {
+.today-panel-head p,
+.board-health-head p {
   max-width: 460px;
   color: var(--muted);
   font-size: 12px;
@@ -849,13 +854,15 @@ textarea:disabled {
   text-align: right;
 }
 
-.today-dashboard {
+.today-dashboard,
+.board-health-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
 }
 
-.today-card {
+.today-card,
+.health-card {
   display: grid;
   gap: 5px;
   min-height: 92px;
@@ -871,24 +878,29 @@ textarea:disabled {
 }
 
 .today-card:hover,
-.today-card.active {
+.today-card.active,
+.health-card:hover,
+.health-card.active {
   border-color: rgba(17, 24, 39, 0.34);
   transform: translateY(-1px);
   box-shadow: 0 18px 34px rgba(16, 24, 40, 0.12);
 }
 
-.today-card-label {
+.today-card-label,
+.health-card-label {
   color: var(--muted);
   font-size: 11px;
   font-weight: 900;
 }
 
-.today-card-count {
+.today-card-count,
+.health-card-count {
   font-size: 26px;
   line-height: 1;
 }
 
-.today-card-description {
+.today-card-description,
+.health-card-description {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
@@ -1713,17 +1725,20 @@ textarea:disabled {
   .stats-strip,
   .mode-guide,
   .mode-pill-grid,
-  .today-dashboard {
+  .today-dashboard,
+  .board-health-list {
     grid-template-columns: 1fr;
   }
 
   .today-panel-head,
+  .board-health-head,
   .layout-help {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .today-panel-head p {
+  .today-panel-head p,
+  .board-health-head p {
     max-width: none;
     text-align: left;
   }

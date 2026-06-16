@@ -80,6 +80,13 @@ const TODAY_DASHBOARD_ITEMS = [
   { id: "dueSoon", label: "기한 임박", description: "2일 이내 마감", matches: isDueSoon, quickFilterId: "" },
   { id: "stale", label: "오래된 미완료", description: "7일 이상 방치", matches: isStaleUnfinished, quickFilterId: "" },
 ];
+const BOARD_HEALTH_ITEMS = [
+  { id: "overdue", label: "기한 초과", description: "마감일 지난 미완료", matches: isOverdue },
+  { id: "missingAssignee", label: "담당 없음", description: "미완료인데 담당자 없음", matches: isMissingAssignee },
+  { id: "stale", label: "오래된 미완료", description: "7일 이상 방치", matches: isStaleUnfinished },
+  { id: "emptySections", label: "빈 섹션", description: "카드 없는 섹션", matches: () => false },
+];
+const FOCUS_ITEMS = [...TODAY_DASHBOARD_ITEMS, ...BOARD_HEALTH_ITEMS];
 
 const seedPosts = [
   {
@@ -323,6 +330,8 @@ const els = {
   statsStrip: document.getElementById("statsStrip"),
   todayPanel: document.getElementById("todayPanel"),
   todayDashboard: document.getElementById("todayDashboard"),
+  boardHealthPanel: document.getElementById("boardHealthPanel"),
+  boardHealthList: document.getElementById("boardHealthList"),
   postTemplate: document.getElementById("postTemplate"),
   boardIdInput: document.getElementById("boardIdInput"),
   displayNameInput: document.getElementById("displayNameInput"),
@@ -622,7 +631,7 @@ function normalizePrefs(value) {
   next.quickFilters = Array.isArray(next.quickFilters)
     ? next.quickFilters.filter((id, index, list) => knownFilterIds.has(id) && list.indexOf(id) === index)
     : [];
-  next.dashboardFocus = TODAY_DASHBOARD_ITEMS.some((item) => item.id === next.dashboardFocus && !item.quickFilterId)
+  next.dashboardFocus = FOCUS_ITEMS.some((item) => item.id === next.dashboardFocus && !item.quickFilterId)
     ? next.dashboardFocus
     : "";
   return next;
@@ -1047,7 +1056,7 @@ function matchesQuickFilters(post) {
 
 function matchesDashboardFocus(post) {
   if (!prefs.dashboardFocus) return true;
-  return TODAY_DASHBOARD_ITEMS.find((item) => item.id === prefs.dashboardFocus)?.matches(post) ?? true;
+  return FOCUS_ITEMS.find((item) => item.id === prefs.dashboardFocus)?.matches(post) ?? true;
 }
 
 function ageInDays(post) {
@@ -1093,6 +1102,10 @@ function isDueSoon(post) {
     && Boolean(post.dueDate)
     && post.dueDate >= today
     && post.dueDate <= addDays(today, DUE_SOON_DAYS);
+}
+
+function isMissingAssignee(post) {
+  return isUnfinished(post) && !post.assignee;
 }
 
 function getDueStatus(post) {
@@ -1755,6 +1768,7 @@ function renderControls() {
   renderAccessPanel();
   renderQuickFilters();
   renderTodayDashboard();
+  renderBoardHealth();
 
   els.layoutOptions.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.layout === shared.layout);
@@ -1780,7 +1794,7 @@ function renderQuickFilters() {
   els.activeFilterSummary.textContent = activeLabels.length
     ? `빠른 필터: ${activeLabels.join(", ")}`
     : prefs.dashboardFocus
-      ? `대시보드: ${TODAY_DASHBOARD_ITEMS.find((item) => item.id === prefs.dashboardFocus)?.label || "선택됨"}`
+      ? `보드 정리: ${FOCUS_ITEMS.find((item) => item.id === prefs.dashboardFocus)?.label || "선택됨"}`
     : "빠른 필터 없음";
 }
 
@@ -1818,6 +1832,57 @@ function applyTodayFocus(item) {
     prefs.dashboardFocus = "";
   } else {
     prefs.quickFilters = [];
+    prefs.dashboardFocus = item.id;
+  }
+  persistPrefs();
+  render();
+}
+
+function getActionablePosts() {
+  return shared.posts.filter((post) => post.moderationStatus !== "pending" && post.status !== "archived");
+}
+
+function getEmptySections() {
+  const usedSections = new Set(getActionablePosts().map((post) => post.section));
+  return shared.sections.filter((section) => section !== "All" && !usedSections.has(section));
+}
+
+function renderBoardHealth() {
+  if (isAccessRestricted()) {
+    els.boardHealthPanel.hidden = true;
+    els.boardHealthList.innerHTML = "";
+    return;
+  }
+
+  els.boardHealthPanel.hidden = false;
+  const actionablePosts = getActionablePosts();
+  const emptySections = getEmptySections();
+  els.boardHealthList.innerHTML = "";
+
+  BOARD_HEALTH_ITEMS.forEach((item) => {
+    const count = item.id === "emptySections"
+      ? emptySections.length
+      : actionablePosts.filter(item.matches).length;
+    const card = document.createElement("button");
+    card.className = `health-card ${prefs.dashboardFocus === item.id ? "active" : ""}`;
+    card.type = "button";
+    card.dataset.healthFocus = item.id;
+    card.innerHTML = `
+      <span class="health-card-label">${item.label}</span>
+      <strong class="health-card-count">${count}</strong>
+      <span class="health-card-description">${item.description}</span>
+    `;
+    card.addEventListener("click", () => applyBoardHealthFocus(item, emptySections));
+    els.boardHealthList.appendChild(card);
+  });
+}
+
+function applyBoardHealthFocus(item, emptySections = getEmptySections()) {
+  prefs.quickFilters = [];
+  if (item.id === "emptySections") {
+    prefs.dashboardFocus = "";
+    prefs.activeSection = emptySections[0] || prefs.activeSection;
+  } else {
     prefs.dashboardFocus = item.id;
   }
   persistPrefs();

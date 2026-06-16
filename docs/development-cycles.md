@@ -264,3 +264,39 @@ Cycle 10 should add a final board health layer:
 - Add a compact `보드 정리` insight panel that flags empty sections, too many stale cards, overdue work, and missing assignees.
 - Provide one-click cleanup filters for the most useful warnings.
 - Use it as the final user-facing polish pass before marking the 10-cycle loop complete.
+
+## Cycle 10 - Board Cleanup Insights
+
+### Development
+
+- Added a `보드 정리` panel below the `오늘 볼 것` dashboard.
+- The panel flags `기한 초과`, `담당 없음`, `오래된 미완료`, and `빈 섹션`.
+- Clicking actionable warnings applies the existing board-scoped focus filter; clicking empty sections jumps to the first empty section.
+- Added `missingAssignee` as a reusable focus condition without adding noise to the main quick-filter bar.
+
+### Code Review Notes
+
+- The cleanup panel derives everything from existing normalized board data.
+- It reuses `dashboardFocus`, so no new persistence model is required.
+- Completed or archived cards are excluded from cleanup warnings to keep the panel action-oriented.
+
+### Real-User Review
+
+- A user can now open the board and immediately see hygiene problems before they become clutter.
+- The panel complements `오늘 볼 것`: one is for immediate work, the other is for keeping the board maintainable.
+- The final UI now has a clearer loop: collect cards, focus work, review activity, clean the board, export/backup.
+
+### Completion Review
+
+The 10-cycle loop now includes:
+
+- Share access modes.
+- Supabase access metadata.
+- Token-aware links.
+- Cloud conflict guard.
+- Attachment evidence previews.
+- Saved quick filters.
+- Today dashboard.
+- Assignee and due dates.
+- Structured activity trace.
+- Board cleanup insights.
