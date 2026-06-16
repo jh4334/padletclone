@@ -148,3 +148,32 @@ Cycle 6 should make the board easier to review after many cards accumulate:
 - Add saved quick filters for `중요`, `막힘`, `결정`, and `첨부 있음`.
 - Add a visible active-filter summary near the search/sort controls.
 - Make filtering persistent per board so returning users land in their preferred working view.
+
+## Cycle 6 - Saved Quick Filters
+
+### Development
+
+- Added a quick filter bar for `중요`, `막힘`, `결정`, and `첨부 있음`.
+- Quick filters can be combined, and the board shows cards matching any selected quick filter.
+- Added an active filter summary beside the search/sort controls.
+- Preferences now save per board using a board-scoped localStorage key, while still reading the legacy global key as fallback.
+
+### Code Review Notes
+
+- The filter predicates reuse existing card fields: `priority`, `status`, `type`, and `attachments`.
+- Unknown or duplicated quick filter ids are normalized out of saved preferences.
+- Quick filters remain available in read-only mode because they only affect the local viewing state, not shared board data.
+
+### Real-User Review
+
+- A user with a crowded board can jump directly to urgent, blocked, decided, or evidence-backed work without typing a search query.
+- The summary text makes it clear why fewer cards are visible.
+- Board-scoped persistence prevents one board's review filter from surprising the user on another board.
+
+### Next Development Task
+
+Cycle 7 should make the app more useful when opened at the start of a work session:
+
+- Add a `오늘 볼 것` dashboard panel.
+- Surface blocked cards, important cards, recent decisions, attachment-backed evidence, and stale unfinished work.
+- Let each dashboard item jump to a matching card or apply a focused quick filter.

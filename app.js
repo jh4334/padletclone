@@ -47,6 +47,12 @@ const CANVAS_CARD_GAP = 24;
 const CANVAS_START_X = 30;
 const CANVAS_START_Y = 30;
 const ACTIVITY_LIMIT = 50;
+const QUICK_FILTERS = [
+  { id: "important", label: "중요", matches: (post) => post.priority === "P1" },
+  { id: "blocked", label: "막힘", matches: (post) => post.status === "blocked" },
+  { id: "decided", label: "결정", matches: (post) => post.status === "decided" || post.type === "decision" },
+  { id: "attachments", label: "첨부 있음", matches: (post) => post.attachments.length > 0 },
+];
 
 const seedPosts = [
   {
@@ -103,6 +109,7 @@ const defaultPrefs = {
   query: "",
   sort: "recent",
   hideArchived: true,
+  quickFilters: [],
 };
 
 const BOARD_TEMPLATES = [
@@ -244,6 +251,8 @@ const profile = loadProfile();
 
 const els = {
   layoutOptions: document.querySelectorAll(".layout-option"),
+  quickFilterButtons: document.querySelectorAll("[data-quick-filter]"),
+  activeFilterSummary: document.getElementById("activeFilterSummary"),
   searchInput: document.getElementById("searchInput"),
   sortSelect: document.getElementById("sortSelect"),
   hideArchivedInput: document.getElementById("hideArchivedInput"),
@@ -550,18 +559,31 @@ function persistProfile() {
   localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(profile));
 }
 
+function prefsKey() {
+  return `${LOCAL_PREF_KEY}-${boardId}`;
+}
+
+function normalizePrefs(value) {
+  const parsed = value && typeof value === "object" ? value : {};
+  const next = { ...structuredClone(defaultPrefs), ...parsed };
+  const knownFilterIds = new Set(QUICK_FILTERS.map((filter) => filter.id));
+  next.quickFilters = Array.isArray(next.quickFilters)
+    ? next.quickFilters.filter((id, index, list) => knownFilterIds.has(id) && list.indexOf(id) === index)
+    : [];
+  return next;
+}
+
 function loadPrefs() {
   try {
-    const raw = localStorage.getItem(LOCAL_PREF_KEY);
-    if (!raw) return structuredClone(defaultPrefs);
-    return { ...structuredClone(defaultPrefs), ...JSON.parse(raw) };
+    const raw = localStorage.getItem(prefsKey()) || localStorage.getItem(LOCAL_PREF_KEY);
+    return raw ? normalizePrefs(JSON.parse(raw)) : structuredClone(defaultPrefs);
   } catch {
     return structuredClone(defaultPrefs);
   }
 }
 
 function persistPrefs() {
-  localStorage.setItem(LOCAL_PREF_KEY, JSON.stringify(prefs));
+  localStorage.setItem(prefsKey(), JSON.stringify(prefs));
 }
 
 function loadBoardSnapshot() {
@@ -943,6 +965,7 @@ function filteredPosts() {
   return shared.posts
     .filter((post) => prefs.activeSection === "All" || post.section === prefs.activeSection)
     .filter((post) => !prefs.hideArchived || post.status !== "archived")
+    .filter(matchesQuickFilters)
     .filter((post) => {
       if (!q) return true;
       return [post.title, post.content, post.authorName, post.status, post.priority, post.type, post.tags.join(" ")]
@@ -951,6 +974,11 @@ function filteredPosts() {
         .includes(q);
     })
     .sort(sortPosts);
+}
+
+function matchesQuickFilters(post) {
+  if (!prefs.quickFilters.length) return true;
+  return prefs.quickFilters.some((id) => QUICK_FILTERS.find((filter) => filter.id === id)?.matches(post));
 }
 
 function sortPosts(a, b) {
@@ -1528,6 +1556,7 @@ function renderControls() {
   renderStorageModeNotice();
   renderConflictPanel();
   renderAccessPanel();
+  renderQuickFilters();
 
   els.layoutOptions.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.layout === shared.layout);
@@ -1535,6 +1564,24 @@ function renderControls() {
 
   renderLayoutHelp();
   applyReadOnlyState();
+}
+
+function renderQuickFilters() {
+  const active = new Set(prefs.quickFilters);
+
+  els.quickFilterButtons.forEach((btn) => {
+    const isActive = active.has(btn.dataset.quickFilter);
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-pressed", String(isActive));
+  });
+
+  const activeLabels = prefs.quickFilters
+    .map((id) => QUICK_FILTERS.find((filter) => filter.id === id)?.label)
+    .filter(Boolean);
+
+  els.activeFilterSummary.textContent = activeLabels.length
+    ? `빠른 필터: ${activeLabels.join(", ")}`
+    : "빠른 필터 없음";
 }
 
 function renderLayoutHelp() {
@@ -2200,7 +2247,7 @@ async function importBackup(file) {
 
     const before = cloneSharedState();
     shared = normalizeSharedState(backup.shared);
-    prefs = { ...structuredClone(defaultPrefs), ...(backup.prefs || {}) };
+    prefs = normalizePrefs(backup.prefs);
     if (backup.profile?.name) {
       profile.name = backup.profile.name;
       persistProfile();
@@ -2377,6 +2424,19 @@ function setupEvents() {
     btn.addEventListener("click", () => {
       shared.layout = btn.dataset.layout;
       persistAndRender();
+    });
+  });
+
+  els.quickFilterButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const filterId = btn.dataset.quickFilter;
+      if (!QUICK_FILTERS.some((filter) => filter.id === filterId)) return;
+
+      prefs.quickFilters = prefs.quickFilters.includes(filterId)
+        ? prefs.quickFilters.filter((id) => id !== filterId)
+        : [...prefs.quickFilters, filterId];
+      persistPrefs();
+      render();
     });
   });
 

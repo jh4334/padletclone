@@ -261,6 +261,15 @@
               <input id="hideArchivedInput" type="checkbox" checked>
               <span>Archived 숨김</span>
             </label>
+
+            <div id="quickFilterBar" class="quick-filter-bar" role="group" aria-label="빠른 필터">
+              <button class="quick-filter-btn" type="button" data-quick-filter="important" aria-pressed="false">중요</button>
+              <button class="quick-filter-btn" type="button" data-quick-filter="blocked" aria-pressed="false">막힘</button>
+              <button class="quick-filter-btn" type="button" data-quick-filter="decided" aria-pressed="false">결정</button>
+              <button class="quick-filter-btn" type="button" data-quick-filter="attachments" aria-pressed="false">첨부 있음</button>
+            </div>
+
+            <p id="activeFilterSummary" class="active-filter-summary" aria-live="polite">빠른 필터 없음</p>
           </nav>
 
           <section id="modeGuide" class="mode-guide" aria-label="Boardly 사용 방식">

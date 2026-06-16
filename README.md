@@ -23,6 +23,7 @@ Boardly Local is not only a Padlet clone and not only a workflow tool. It is a P
 - Board templates for weekly reviews, meetings, and idea exploration
 - Activity log with one-step undo for recent local changes
 - Attachment preview cards with file type, local-only status, and IndexedDB body availability
+- Saved quick filters for important, blocked, decided, and attachment-backed cards
 - CSV export and JSON backup/restore
 - Responsive desktop and mobile UI
 
@@ -46,6 +47,7 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 - Read-only/edit share tokens are saved in both the board snapshot and Supabase row metadata.
 - Read-only/edit links are currently enforced in the frontend after the board metadata is loaded. Treat them as a collaboration UX guard, not as a complete server-side security boundary until auth/RLS or a trusted server check is added.
 - A local browser copy is kept in `localStorage` as fallback.
+- Search, sort, archived visibility, and quick filters are saved per board in `localStorage`.
 - Attachments use `IndexedDB`.
 - Attachment metadata is saved with cards, including future cloud storage path fields.
 - Attachment file bodies are still saved only in the current browser profile and are marked as browser-only in the UI.
