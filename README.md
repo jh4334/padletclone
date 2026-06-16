@@ -40,7 +40,8 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 
 - Cards, sections, comments, and reactions are saved to Supabase when configured.
 - Templates, activity history, and card edits are stored inside the board snapshot.
-- Read-only links are currently enforced in the frontend. Treat them as a collaboration UX guard, not as a complete server-side security boundary.
+- Read-only/edit share tokens are saved in both the board snapshot and Supabase row metadata.
+- Read-only links are currently enforced in the frontend. Treat them as a collaboration UX guard, not as a complete server-side security boundary until auth/RLS or a trusted server check is added.
 - A local browser copy is kept in `localStorage` as fallback.
 - Attachments use `IndexedDB`.
 - Attachment file bodies are still saved only in the current browser profile.
@@ -50,6 +51,7 @@ http://127.0.0.1:5177/index.html?board=my-workspace
 
 1. Open your Supabase project SQL Editor.
 2. Run `supabase-schema.sql`.
+   - If you already created the table before, run the file again. It includes `add column if not exists` migration lines for the access metadata columns.
 3. Open `boardly.config.js`.
 4. Keep `SUPABASE_URL` as your project URL.
 5. Put your Project API `anon` / `publishable` key in `SUPABASE_ANON_KEY`.

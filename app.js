@@ -331,6 +331,7 @@ function createAccessToken() {
 
 function createAccessConfig() {
   return {
+    ownerId: "",
     viewToken: createAccessToken(),
     editToken: createAccessToken(),
     updatedAt: new Date().toISOString(),
@@ -442,6 +443,8 @@ function normalizeSharedState(value) {
     access: normalizeAccess(value?.access),
   };
 
+  if (!merged.access.ownerId) merged.access.ownerId = profile.id;
+
   for (const post of merged.posts) {
     if (!merged.sections.includes(post.section)) merged.sections.push(post.section);
   }
@@ -501,6 +504,28 @@ function persistBoardSnapshot(options = {}) {
   } catch {
     updateSaveStatus("Storage full", "error");
   }
+}
+
+function mergeCloudAccess(snapshot, row) {
+  const merged = normalizeSharedState(snapshot);
+  merged.access = normalizeAccess({
+    ...merged.access,
+    viewToken: row?.view_token || merged.access.viewToken,
+    editToken: row?.edit_token || merged.access.editToken,
+    ownerId: row?.owner_id || merged.access.ownerId || profile.id,
+    updatedAt: row?.access_updated_at || merged.access.updatedAt,
+  });
+  return merged;
+}
+
+function getCloudAccessPayload() {
+  if (!shared.access.ownerId) shared.access.ownerId = profile.id;
+  return {
+    view_token: shared.access.viewToken,
+    edit_token: shared.access.editToken,
+    owner_id: shared.access.ownerId,
+    access_updated_at: shared.access.updatedAt || new Date().toISOString(),
+  };
 }
 
 function isReadOnlyMode() {
@@ -618,14 +643,14 @@ async function initializeCloudSync() {
   try {
     const { data, error } = await cloud.client
       .from(cloud.table)
-      .select("snapshot, updated_at")
+      .select("snapshot, updated_at, view_token, edit_token, owner_id, access_updated_at")
       .eq("board_id", boardId)
       .maybeSingle();
 
     if (error) throw error;
 
     if (data?.snapshot) {
-      shared = normalizeSharedState(data.snapshot);
+      shared = mergeCloudAccess(data.snapshot, data);
       persistBoardSnapshot({ syncCloud: false });
       render();
       updateSaveStatus("Cloud loaded", "cloud");
@@ -666,6 +691,7 @@ async function saveCloudSnapshot() {
       .upsert({
         board_id: boardId,
         snapshot: shared,
+        ...getCloudAccessPayload(),
         updated_at: new Date().toISOString(),
       }, { onConflict: "board_id" });
 

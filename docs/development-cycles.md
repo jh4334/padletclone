@@ -31,3 +31,32 @@ Cycle 2 should move from client-side access UX to Supabase-backed access metadat
 - Store view/edit tokens in the `boardly_boards` row.
 - Update schema notes to explain that true server-side protection requires RLS/auth.
 - Prepare the app for later owner-based permissions.
+
+## Cycle 2 - Supabase Access Metadata
+
+### Development
+
+- Added `ownerId` to the board access state so each board has a future permission owner field.
+- Supabase loads now request `view_token`, `edit_token`, `owner_id`, and `access_updated_at` along with the snapshot.
+- Cloud saves now upsert the access tokens and owner metadata as first-class row columns, while keeping the same values inside the snapshot.
+- `supabase-schema.sql` now creates and migrates the access metadata columns for existing tables.
+
+### Code Review Notes
+
+- Access metadata is now durable outside the JSON snapshot, which makes later RLS/auth policy work possible.
+- The row metadata and `snapshot.access` are intentionally duplicated; this keeps the current frontend simple while preparing policy-level checks.
+- Current Supabase policies are still public for the no-login prototype. The tokens improve structure, not complete server-side security.
+
+### Real-User Review
+
+- A user who opens the same board from another device can keep the same read/edit links after cloud load.
+- The app is now less likely to silently regenerate share tokens when Supabase already has canonical board access metadata.
+- The setup docs now explain why running the SQL again matters after this upgrade.
+
+### Next Development Task
+
+Cycle 3 should make share links token-aware in app behavior:
+
+- Validate the URL `token` against the loaded `view_token` or `edit_token`.
+- Show a clear “권한 없음” state when the token does not match.
+- Keep the app usable locally when Supabase is not configured, but prepare the same logic for future RLS/auth enforcement.
