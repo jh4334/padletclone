@@ -712,7 +712,7 @@ textarea:disabled {
   min-height: 0;
   padding: 12px;
   display: grid;
-  grid-template-rows: auto auto auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto auto auto 1fr;
   gap: 10px;
 }
 
@@ -741,7 +741,8 @@ textarea:disabled {
 }
 
 .mode-guide,
-.layout-help {
+.layout-help,
+.today-panel {
   border: 1px solid var(--line);
   border-radius: 12px;
   background:
@@ -821,6 +822,78 @@ textarea:disabled {
   font-weight: 900;
 }
 
+.today-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.today-panel-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.today-panel-head h2 {
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.today-panel-head p {
+  max-width: 460px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.today-dashboard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.today-card {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  border: 1px solid rgba(216, 222, 232, 0.96);
+  border-radius: 16px;
+  padding: 11px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.88)),
+    radial-gradient(circle at top right, rgba(10, 102, 194, 0.09), transparent 44%);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: 0 12px 26px rgba(16, 24, 40, 0.06);
+}
+
+.today-card:hover,
+.today-card.active {
+  border-color: rgba(17, 24, 39, 0.34);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(16, 24, 40, 0.12);
+}
+
+.today-card-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.today-card-count {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.today-card-description {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .stats-strip {
   display: grid;
   grid-template-columns: repeat(5, minmax(110px, 1fr));
@@ -849,6 +922,7 @@ textarea:disabled {
 
 .section-tabs {
   display: flex;
+  align-self: start;
   gap: 7px;
   overflow-x: auto;
   padding-bottom: 2px;
@@ -1567,13 +1641,20 @@ textarea:disabled {
   .field-grid,
   .stats-strip,
   .mode-guide,
-  .mode-pill-grid {
+  .mode-pill-grid,
+  .today-dashboard {
     grid-template-columns: 1fr;
   }
 
+  .today-panel-head,
   .layout-help {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .today-panel-head p {
+    max-width: none;
+    text-align: left;
   }
 
   .layout-help-badge {

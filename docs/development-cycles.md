@@ -177,3 +177,32 @@ Cycle 7 should make the app more useful when opened at the start of a work sessi
 - Add a `오늘 볼 것` dashboard panel.
 - Surface blocked cards, important cards, recent decisions, attachment-backed evidence, and stale unfinished work.
 - Let each dashboard item jump to a matching card or apply a focused quick filter.
+
+## Cycle 7 - Today Dashboard
+
+### Development
+
+- Added a `오늘 볼 것` dashboard between the layout guide and board stats.
+- The dashboard counts important, blocked, recent decision, attachment-backed, and stale unfinished cards.
+- Dashboard clicks apply a focused view: broad quick-filter-backed items reuse saved quick filters, while `최근 결정` and `오래된 미완료` use dedicated board-scoped dashboard focus.
+- The active filter summary now explains dashboard focus states as well as quick filters.
+
+### Code Review Notes
+
+- The dashboard is derived from existing card fields and does not mutate shared board data.
+- Archived and pending moderation cards are excluded from dashboard counts so the panel reflects actionable work.
+- `dashboardFocus` is normalized with prefs, preventing stale or unknown saved focus ids from breaking filtering.
+
+### Real-User Review
+
+- Opening a busy board now gives an immediate “what needs attention” read before the user scans individual cards.
+- `오래된 미완료` catches silent drift that ordinary priority/status filters miss.
+- Reusing quick filters for broad filters keeps dashboard clicks predictable, while recent/stale views stay precise.
+
+### Next Development Task
+
+Cycle 8 should make team execution clearer:
+
+- Add optional assignee and due date fields to cards.
+- Show overdue and due-soon indicators on cards and in the dashboard.
+- Include assignee/due date in backup, CSV export, and edit flows.

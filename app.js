@@ -47,11 +47,20 @@ const CANVAS_CARD_GAP = 24;
 const CANVAS_START_X = 30;
 const CANVAS_START_Y = 30;
 const ACTIVITY_LIMIT = 50;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const STALE_UNFINISHED_DAYS = 7;
 const QUICK_FILTERS = [
   { id: "important", label: "중요", matches: (post) => post.priority === "P1" },
   { id: "blocked", label: "막힘", matches: (post) => post.status === "blocked" },
   { id: "decided", label: "결정", matches: (post) => post.status === "decided" || post.type === "decision" },
   { id: "attachments", label: "첨부 있음", matches: (post) => post.attachments.length > 0 },
+];
+const TODAY_DASHBOARD_ITEMS = [
+  { id: "important", label: "중요", description: "우선순위 P1", matches: (post) => post.priority === "P1", quickFilterId: "important" },
+  { id: "blocked", label: "막힘", description: "도움이 필요한 일", matches: (post) => post.status === "blocked", quickFilterId: "blocked" },
+  { id: "decided", label: "최근 결정", description: "7일 이내 결정", matches: isRecentDecision, quickFilterId: "" },
+  { id: "attachments", label: "첨부 있음", description: "근거 자료 포함", matches: (post) => post.attachments.length > 0, quickFilterId: "attachments" },
+  { id: "stale", label: "오래된 미완료", description: "7일 이상 방치", matches: isStaleUnfinished, quickFilterId: "" },
 ];
 
 const seedPosts = [
@@ -110,6 +119,7 @@ const defaultPrefs = {
   sort: "recent",
   hideArchived: true,
   quickFilters: [],
+  dashboardFocus: "",
 };
 
 const BOARD_TEMPLATES = [
@@ -290,6 +300,8 @@ const els = {
   layoutHelpTitle: document.getElementById("layoutHelpTitle"),
   layoutHelpText: document.getElementById("layoutHelpText"),
   statsStrip: document.getElementById("statsStrip"),
+  todayPanel: document.getElementById("todayPanel"),
+  todayDashboard: document.getElementById("todayDashboard"),
   postTemplate: document.getElementById("postTemplate"),
   boardIdInput: document.getElementById("boardIdInput"),
   displayNameInput: document.getElementById("displayNameInput"),
@@ -570,6 +582,9 @@ function normalizePrefs(value) {
   next.quickFilters = Array.isArray(next.quickFilters)
     ? next.quickFilters.filter((id, index, list) => knownFilterIds.has(id) && list.indexOf(id) === index)
     : [];
+  next.dashboardFocus = TODAY_DASHBOARD_ITEMS.some((item) => item.id === next.dashboardFocus && !item.quickFilterId)
+    ? next.dashboardFocus
+    : "";
   return next;
 }
 
@@ -966,6 +981,7 @@ function filteredPosts() {
     .filter((post) => prefs.activeSection === "All" || post.section === prefs.activeSection)
     .filter((post) => !prefs.hideArchived || post.status !== "archived")
     .filter(matchesQuickFilters)
+    .filter(matchesDashboardFocus)
     .filter((post) => {
       if (!q) return true;
       return [post.title, post.content, post.authorName, post.status, post.priority, post.type, post.tags.join(" ")]
@@ -979,6 +995,25 @@ function filteredPosts() {
 function matchesQuickFilters(post) {
   if (!prefs.quickFilters.length) return true;
   return prefs.quickFilters.some((id) => QUICK_FILTERS.find((filter) => filter.id === id)?.matches(post));
+}
+
+function matchesDashboardFocus(post) {
+  if (!prefs.dashboardFocus) return true;
+  return TODAY_DASHBOARD_ITEMS.find((item) => item.id === prefs.dashboardFocus)?.matches(post) ?? true;
+}
+
+function ageInDays(post) {
+  const created = new Date(post.createdAt).getTime();
+  if (!Number.isFinite(created)) return 0;
+  return (Date.now() - created) / MS_PER_DAY;
+}
+
+function isRecentDecision(post) {
+  return (post.status === "decided" || post.type === "decision") && ageInDays(post) <= STALE_UNFINISHED_DAYS;
+}
+
+function isStaleUnfinished(post) {
+  return !["decided", "archived"].includes(post.status) && ageInDays(post) >= STALE_UNFINISHED_DAYS;
 }
 
 function sortPosts(a, b) {
@@ -1557,6 +1592,7 @@ function renderControls() {
   renderConflictPanel();
   renderAccessPanel();
   renderQuickFilters();
+  renderTodayDashboard();
 
   els.layoutOptions.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.layout === shared.layout);
@@ -1581,7 +1617,49 @@ function renderQuickFilters() {
 
   els.activeFilterSummary.textContent = activeLabels.length
     ? `빠른 필터: ${activeLabels.join(", ")}`
+    : prefs.dashboardFocus
+      ? `대시보드: ${TODAY_DASHBOARD_ITEMS.find((item) => item.id === prefs.dashboardFocus)?.label || "선택됨"}`
     : "빠른 필터 없음";
+}
+
+function renderTodayDashboard() {
+  if (isAccessRestricted()) {
+    els.todayPanel.hidden = true;
+    els.todayDashboard.innerHTML = "";
+    return;
+  }
+
+  els.todayPanel.hidden = false;
+  const visibleSource = shared.posts.filter((post) => post.moderationStatus !== "pending" && post.status !== "archived");
+  els.todayDashboard.innerHTML = "";
+
+  TODAY_DASHBOARD_ITEMS.forEach((item) => {
+    const count = visibleSource.filter(item.matches).length;
+    const card = document.createElement("button");
+    const isActive = prefs.dashboardFocus === item.id || Boolean(item.quickFilterId && prefs.quickFilters.includes(item.quickFilterId));
+    card.className = `today-card ${isActive ? "active" : ""}`;
+    card.type = "button";
+    card.dataset.todayFocus = item.id;
+    card.innerHTML = `
+      <span class="today-card-label">${item.label}</span>
+      <strong class="today-card-count">${count}</strong>
+      <span class="today-card-description">${item.description}</span>
+    `;
+    card.addEventListener("click", () => applyTodayFocus(item));
+    els.todayDashboard.appendChild(card);
+  });
+}
+
+function applyTodayFocus(item) {
+  if (item.quickFilterId) {
+    prefs.quickFilters = [item.quickFilterId];
+    prefs.dashboardFocus = "";
+  } else {
+    prefs.quickFilters = [];
+    prefs.dashboardFocus = item.id;
+  }
+  persistPrefs();
+  render();
 }
 
 function renderLayoutHelp() {
@@ -2435,6 +2513,7 @@ function setupEvents() {
       prefs.quickFilters = prefs.quickFilters.includes(filterId)
         ? prefs.quickFilters.filter((id) => id !== filterId)
         : [...prefs.quickFilters, filterId];
+      prefs.dashboardFocus = "";
       persistPrefs();
       render();
     });
