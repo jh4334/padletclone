@@ -13,6 +13,15 @@ const ACCESS_PENDING_MESSAGE = "공유 링크 권한을 확인 중입니다. 잠
 const ACCESS_DENIED_MESSAGE = "권한 없음: 공유 링크의 토큰이 보드 권한과 일치하지 않습니다. 올바른 링크로 다시 열어주세요.";
 const CLOUD_CONFLICT_TITLE = "원격 변경 있음";
 const CLOUD_CONFLICT_MESSAGE = "다른 기기에서 먼저 저장한 변경이 있습니다. 지금 저장하면 그 변경을 덮어쓸 수 있습니다.";
+const ATTACHMENT_KIND_LABELS = {
+  image: "이미지",
+  pdf: "PDF",
+  sheet: "표",
+  doc: "문서",
+  deck: "슬라이드",
+  text: "텍스트",
+  file: "파일",
+};
 
 const STATUSES = ["new", "discussing", "blocked", "decided", "archived"];
 const STATUS_LABELS = {
@@ -408,15 +417,54 @@ function normalizeComment(comment) {
   };
 }
 
+function getFileExtension(name = "") {
+  const parts = String(name).toLowerCase().split(".");
+  return parts.length > 1 ? parts.at(-1) : "";
+}
+
+function detectAttachmentKind(attachment) {
+  const type = String(attachment?.type || "").toLowerCase();
+  const extension = getFileExtension(attachment?.name);
+
+  if (type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) return "image";
+  if (type === "application/pdf" || extension === "pdf") return "pdf";
+  if (type.includes("spreadsheet") || type.includes("excel") || ["csv", "xlsx", "xls"].includes(extension)) return "sheet";
+  if (type.includes("presentation") || ["ppt", "pptx"].includes(extension)) return "deck";
+  if (type.includes("word") || ["doc", "docx"].includes(extension)) return "doc";
+  if (type.startsWith("text/") || ["txt", "md"].includes(extension)) return "text";
+  return "file";
+}
+
+function sanitizeStorageFileName(name) {
+  return String(name || "attachment")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "attachment";
+}
+
+function createAttachmentStoragePath(id, name) {
+  return `${boardId}/${id}/${sanitizeStorageFileName(name)}`;
+}
+
 function normalizeAttachment(attachment) {
   if (!attachment || typeof attachment !== "object") return null;
   const id = attachment.id || crypto.randomUUID();
+  const name = attachment.name || attachment.fileName || "첨부 자료";
+  const type = attachment.type || attachment.mimeType || "application/octet-stream";
+  const storageProvider = attachment.storageProvider || attachment.storage?.provider || "indexeddb";
+
   return {
     id,
-    name: attachment.name || attachment.fileName || "첨부 자료",
+    name,
     size: Number.isFinite(attachment.size) ? attachment.size : 0,
-    type: attachment.type || attachment.mimeType || "application/octet-stream",
+    type,
     uploadedAt: attachment.uploadedAt || new Date().toISOString(),
+    previewKind: attachment.previewKind || detectAttachmentKind({ name, type }),
+    storageProvider,
+    storageBucket: attachment.storageBucket || attachment.storage?.bucket || "",
+    storagePath: attachment.storagePath || attachment.storage?.path || createAttachmentStoragePath(id, name),
+    localOnly: typeof attachment.localOnly === "boolean" ? attachment.localOnly : storageProvider === "indexeddb",
   };
 }
 
@@ -966,28 +1014,95 @@ async function deleteAttachment(id) {
 }
 
 async function renderAttachmentLink(attachment, container) {
+  const card = document.createElement("article");
+  card.className = `attachment-card ${attachment.previewKind}`;
+
+  const preview = document.createElement("div");
+  preview.className = "attachment-preview";
+  preview.textContent = getAttachmentPreviewGlyph(attachment);
+
+  const body = document.createElement("div");
+  body.className = "attachment-body";
+
+  const header = document.createElement("div");
+  header.className = "attachment-head";
+
+  const title = document.createElement("strong");
+  title.textContent = attachment.name;
+
+  const kind = document.createElement("span");
+  kind.className = "attachment-kind";
+  kind.textContent = ATTACHMENT_KIND_LABELS[attachment.previewKind] || ATTACHMENT_KIND_LABELS.file;
+
+  const meta = document.createElement("div");
+  meta.className = "attachment-meta";
+  meta.textContent = `${formatBytes(attachment.size)} · ${getAttachmentStorageLabel(attachment)}`;
+
+  const status = document.createElement("div");
+  status.className = "attachment-storage";
+  status.textContent = "파일 본문 확인 중";
+
   const link = document.createElement("a");
-  link.className = "attachment-link locked";
+  link.className = "attachment-open locked";
   link.href = "#";
-  link.textContent = `${attachment.name}${attachment.size ? ` · ${formatBytes(attachment.size)}` : ""}`;
+  link.textContent = "열기 대기";
   link.addEventListener("click", (event) => event.preventDefault());
-  container.appendChild(link);
+
+  header.append(title, kind);
+  body.append(header, meta, status, link);
+  card.append(preview, body);
+  container.appendChild(card);
 
   try {
     const blob = await getAttachment(attachment.id);
     if (!blob) {
-      link.textContent = `${attachment.name} · 파일 없음`;
+      status.textContent = `${getAttachmentStorageLabel(attachment)} · 본문 없음`;
+      link.textContent = "이 브라우저에 파일 없음";
       return;
     }
 
-    link.href = URL.createObjectURL(blob);
-    link.target = "_blank";
-    link.rel = "noreferrer";
-    link.download = attachment.name;
-    link.classList.remove("locked");
+    const objectUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(blob) : "";
+    status.textContent = `${getAttachmentStorageLabel(attachment)} · 열기 가능`;
+    if (objectUrl) {
+      link.href = objectUrl;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.download = attachment.name;
+      link.textContent = "파일 열기";
+      link.classList.remove("locked");
+
+      if (attachment.previewKind === "image") {
+        preview.textContent = "";
+        const image = document.createElement("img");
+        image.src = objectUrl;
+        image.alt = `${attachment.name} 미리보기`;
+        preview.appendChild(image);
+      }
+    } else {
+      link.textContent = "브라우저 열기 미지원";
+    }
   } catch {
-    link.textContent = `${attachment.name} · 열기 실패`;
+    status.textContent = `${getAttachmentStorageLabel(attachment)} · 본문 없음`;
+    link.textContent = "이 브라우저에 파일 없음";
   }
+}
+
+function getAttachmentPreviewGlyph(attachment) {
+  const glyphs = {
+    image: "IMG",
+    pdf: "PDF",
+    sheet: "CSV",
+    doc: "DOC",
+    deck: "PPT",
+    text: "TXT",
+    file: "FILE",
+  };
+  return glyphs[attachment.previewKind] || glyphs.file;
+}
+
+function getAttachmentStorageLabel(attachment) {
+  if (attachment.storageProvider === "supabase") return "클라우드 저장";
+  return attachment.localOnly ? "이 브라우저 전용" : "클라우드 준비";
 }
 
 function formatBytes(bytes) {
@@ -1701,7 +1816,7 @@ function renderEditAttachmentList() {
     item.className = "edit-attachment-item";
 
     const label = document.createElement("span");
-    label.textContent = `${attachment.name}${attachment.size ? ` · ${formatBytes(attachment.size)}` : ""}`;
+    label.textContent = `${ATTACHMENT_KIND_LABELS[attachment.previewKind] || "파일"} · ${attachment.name}${attachment.size ? ` · ${formatBytes(attachment.size)}` : ""}`;
 
     const removeBtn = document.createElement("button");
     removeBtn.className = "edit-attachment-remove";
@@ -1860,13 +1975,15 @@ function canvasCardsOverlap(a, b) {
 }
 
 async function createLocalAttachment(file) {
-  const attachment = {
+  const attachment = normalizeAttachment({
     id: crypto.randomUUID(),
     name: file.name,
     size: file.size,
     type: file.type || "application/octet-stream",
     uploadedAt: new Date().toISOString(),
-  };
+    storageProvider: "indexeddb",
+    localOnly: true,
+  });
   await putAttachment(attachment.id, file);
   return attachment;
 }

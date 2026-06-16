@@ -1054,28 +1054,101 @@ textarea:disabled {
 
 .attachment-list {
   display: grid;
-  gap: 5px;
+  gap: 7px;
 }
 
-.attachment-link {
-  display: inline-flex;
+.attachment-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.92)),
+    var(--panel-soft);
+  padding: 7px;
+}
+
+.attachment-preview {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border-radius: 10px;
+  background: rgba(83, 138, 255, 0.12);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  overflow: hidden;
+}
+
+.attachment-card.image .attachment-preview {
+  background: rgba(52, 199, 89, 0.12);
+  color: var(--green);
+}
+
+.attachment-card.pdf .attachment-preview {
+  background: rgba(255, 95, 86, 0.12);
+  color: var(--red);
+}
+
+.attachment-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attachment-head {
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #1f5f99;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #f7fbff;
-  padding: 6px 8px;
+}
+
+.attachment-head strong {
+  min-width: 0;
+  color: #344054;
   font-size: 12px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-kind {
+  flex: none;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: var(--accent);
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.attachment-meta,
+.attachment-storage {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.attachment-open {
+  color: #1f5f99;
+  font-size: 11px;
+  font-weight: 900;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-.attachment-link.locked {
+.attachment-open.locked {
   color: var(--muted);
-  background: #f3f5f7;
+  pointer-events: none;
 }
 
 .tag-list {

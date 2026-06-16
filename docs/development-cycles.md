@@ -119,3 +119,32 @@ Cycle 5 should improve attachment usefulness:
 - Add cloud-ready attachment metadata for future Supabase Storage support.
 - Add image/PDF/file preview states so attached evidence is easier to inspect.
 - Keep current IndexedDB fallback, but make the UI clearly show whether a file body exists only on this browser.
+
+## Cycle 5 - Attachment Evidence Preview
+
+### Development
+
+- Added normalized attachment metadata: `previewKind`, `storageProvider`, `storageBucket`, `storagePath`, and `localOnly`.
+- New local uploads now carry cloud-ready storage path metadata while still saving file bodies in IndexedDB.
+- Replaced simple attachment links with preview cards that show file type, size, storage scope, and whether the file body exists locally.
+- Image attachments can show an inline thumbnail when the local file body is available.
+
+### Code Review Notes
+
+- Existing attachment records are upgraded through `normalizeAttachment()` without requiring a manual migration.
+- `storagePath` prepares future Supabase Storage support, but no file bodies are uploaded to cloud storage yet.
+- The UI explicitly separates metadata availability from file-body availability, reducing confusion across browsers.
+
+### Real-User Review
+
+- A user can now tell at a glance whether an attachment is an image, PDF, spreadsheet, text file, or generic file.
+- When a backup or cloud-loaded board points to an attachment whose body is missing on this browser, the card says so instead of only showing a broken link.
+- The edit drawer keeps attachment removal simple while showing the file type before the name.
+
+### Next Development Task
+
+Cycle 6 should make the board easier to review after many cards accumulate:
+
+- Add saved quick filters for `중요`, `막힘`, `결정`, and `첨부 있음`.
+- Add a visible active-filter summary near the search/sort controls.
+- Make filtering persistent per board so returning users land in their preferred working view.
